@@ -1,0 +1,31 @@
+# Build artifacts
+*.o
+*.obj
+backend/*.o
+
+# Binaries
+valvewise
+valvewise.exe
+valvewise-sim
+valvewise-sim.exe
+backend/valvewise
+backend/valvewise.exe
+
+# Documentation build output
+docs/html/
+build/
+
+# Output JSON files
+output.json
+test_output.json
+test_multi.json
+backend/output.json
+backend/test_output.json
+backend/test_multi.json
+*.json
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

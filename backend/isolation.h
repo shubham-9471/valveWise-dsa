@@ -11,6 +11,10 @@
 #ifndef ISOLATION_H
 #define ISOLATION_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "graph.h"
 #include "queue.h"
 #include <stdbool.h>
@@ -85,5 +89,9 @@ void simulate_failure(Graph *g, int link_idx);
 
 /** Reset all STATUS_BURST links back to STATUS_OPEN. */
 void reset_failures(Graph *g);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ISOLATION_H */

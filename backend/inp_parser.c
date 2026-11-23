@@ -56,206 +56,192 @@ static bool is_section(const char *s) {
     return (*s == '[');
 }
 
-/* ── Section parsers ──────────────────────────────────────────────── */
+/* ── Per-line section parsing ─────────────────────────────────────── */
 
-/*
- * Each parser reads lines until it hits the next section header or EOF.
- * It does NOT consume the section header line — parse_inp_file handles that.
- * FILE* is positioned just after the section header when these are called.
- */
+static void parse_line_junction(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64] = {0};
+    double elev = 0.0, demand = 0.0;
+    int n = sscanf(line, "%63s %lf %lf", id, &elev, &demand);
+    if (n < 1) return;
 
-int parse_section_junctions(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
-
-        char id[64] = {0};
-        double elev = 0.0, demand = 0.0;
-        int n = sscanf(line, "%63s %lf %lf", id, &elev, &demand);
-        if (n < 1) continue;
-
-        int idx = graph_add_node(g, id, NODE_JUNCTION, elev, demand, 0.0, 0.0);
-        if (idx >= 0) hashmap_insert(ni->node_map, id, idx);
-    }
-    return 0;
+    int idx = graph_add_node(g, id, NODE_JUNCTION, elev, demand, 0.0, 0.0);
+    if (idx >= 0) hashmap_insert(ni->node_map, id, idx);
 }
 
-int parse_section_reservoirs(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
+static void parse_line_reservoir(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64] = {0};
+    double head = 0.0;
+    if (sscanf(line, "%63s %lf", id, &head) < 1) return;
 
-        char id[64] = {0};
-        double head = 0.0;
-        if (sscanf(line, "%63s %lf", id, &head) < 1) continue;
-
-        int idx = graph_add_node(g, id, NODE_RESERVOIR, head, 0.0, 0.0, 0.0);
-        if (idx >= 0) hashmap_insert(ni->node_map, id, idx);
-    }
-    return 0;
+    int idx = graph_add_node(g, id, NODE_RESERVOIR, head, 0.0, 0.0, 0.0);
+    if (idx >= 0) hashmap_insert(ni->node_map, id, idx);
 }
 
-int parse_section_tanks(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
+static void parse_line_tank(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64] = {0};
+    double elev = 0.0;
+    if (sscanf(line, "%63s %lf", id, &elev) < 1) return;
 
-        char id[64] = {0};
-        double elev = 0.0, minlvl = 0.0, maxlvl = 0.0, initlvl = 0.0, diam = 0.0;
-        if (sscanf(line, "%63s %lf %lf %lf %lf %lf",
-                   id, &elev, &minlvl, &maxlvl, &initlvl, &diam) < 1) continue;
-
-        int idx = graph_add_node(g, id, NODE_TANK, elev, 0.0, 0.0, 0.0);
-        if (idx >= 0) hashmap_insert(ni->node_map, id, idx);
-    }
-    return 0;
+    int idx = graph_add_node(g, id, NODE_TANK, elev, 0.0, 0.0, 0.0);
+    if (idx >= 0) hashmap_insert(ni->node_map, id, idx);
 }
 
-int parse_section_pipes(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
+static void parse_line_pipe(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64]={0}, n1[64]={0}, n2[64]={0}, status_tok[16]="OPEN";
+    double length=0.0, diam=0.0, rough=0.0;
 
-        char id[64]={0}, n1[64]={0}, n2[64]={0}, status_tok[16]="OPEN";
-        double length=0.0, diam=0.0, rough=0.0;
+    int n = sscanf(line, "%63s %63s %63s %lf %lf %lf %15s",
+                   id, n1, n2, &length, &diam, &rough, status_tok);
+    if (n < 6) return;
 
-        int n = sscanf(line, "%63s %63s %63s %lf %lf %lf %15s",
-                       id, n1, n2, &length, &diam, &rough, status_tok);
-        if (n < 6) continue;
-
-        int from_idx = -1, to_idx = -1;
-        if (!hashmap_get(ni->node_map, n1, &from_idx)) {
-            fprintf(stderr, "[PIPES] Unknown node '%s'\n", n1); continue;
-        }
-        if (!hashmap_get(ni->node_map, n2, &to_idx)) {
-            fprintf(stderr, "[PIPES] Unknown node '%s'\n", n2); continue;
-        }
-
-        LinkStatus st = STATUS_OPEN;
-        if (strcasecmp(status_tok, "CLOSED") == 0) st = STATUS_CLOSED;
-
-        int idx = graph_add_link(g, id, from_idx, to_idx,
-                                 length, diam, rough,
-                                 LINK_TYPE_PIPE, st, false);
-        if (idx >= 0) {
-            hashmap_insert(ni->link_map, id, idx);
-            graph_add_edge(g, from_idx, to_idx, idx);
-            graph_add_edge(g, to_idx, from_idx, idx);
-        }
+    int from_idx = -1, to_idx = -1;
+    if (!hashmap_get(ni->node_map, n1, &from_idx)) {
+        fprintf(stderr, "[PIPES] Unknown node '%s'\n", n1); return;
     }
-    return 0;
+    if (!hashmap_get(ni->node_map, n2, &to_idx)) {
+        fprintf(stderr, "[PIPES] Unknown node '%s'\n", n2); return;
+    }
+
+    LinkStatus st = STATUS_OPEN;
+    if (strcasecmp(status_tok, "CLOSED") == 0) st = STATUS_CLOSED;
+
+    int idx = graph_add_link(g, id, from_idx, to_idx,
+                             length, diam, rough,
+                             LINK_TYPE_PIPE, st, false);
+    if (idx >= 0) {
+        hashmap_insert(ni->link_map, id, idx);
+        graph_add_edge(g, from_idx, to_idx, idx);
+        graph_add_edge(g, to_idx, from_idx, idx);
+    }
 }
 
-int parse_section_valves(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
+static void parse_line_valve(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64]={0}, n1[64]={0}, n2[64]={0}, vtype[16]={0};
+    double diam=0.0, setting=0.0;
 
-        char id[64]={0}, n1[64]={0}, n2[64]={0}, vtype[16]={0};
-        double diam=0.0, setting=0.0;
+    int n = sscanf(line, "%63s %63s %63s %lf %15s %lf",
+                   id, n1, n2, &diam, vtype, &setting);
+    if (n < 4) return;
 
-        int n = sscanf(line, "%63s %63s %63s %lf %15s %lf",
-                       id, n1, n2, &diam, vtype, &setting);
-        if (n < 4) continue;
+    int from_idx = -1, to_idx = -1;
+    if (!hashmap_get(ni->node_map, n1, &from_idx)) return;
+    if (!hashmap_get(ni->node_map, n2, &to_idx))   return;
 
-        int from_idx = -1, to_idx = -1;
-        if (!hashmap_get(ni->node_map, n1, &from_idx)) continue;
-        if (!hashmap_get(ni->node_map, n2, &to_idx))   continue;
-
-        int idx = graph_add_link(g, id, from_idx, to_idx,
-                                 0.0, diam, 0.0,
-                                 LINK_TYPE_VALVE, STATUS_OPEN, true);
-        if (idx >= 0) {
-            hashmap_insert(ni->link_map, id, idx);
-            graph_add_edge(g, from_idx, to_idx, idx);
-            graph_add_edge(g, to_idx, from_idx, idx);
-        }
+    int idx = graph_add_link(g, id, from_idx, to_idx,
+                             0.0, diam, 0.0,
+                             LINK_TYPE_VALVE, STATUS_OPEN, true);
+    if (idx >= 0) {
+        hashmap_insert(ni->link_map, id, idx);
+        graph_add_edge(g, from_idx, to_idx, idx);
+        graph_add_edge(g, to_idx, from_idx, idx);
     }
-    return 0;
 }
 
-int parse_section_coordinates(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
+static void parse_line_pump(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64]={0}, n1[64]={0}, n2[64]={0};
+    if (sscanf(line, "%63s %63s %63s", id, n1, n2) < 3) return;
 
-        char id[64] = {0};
-        double x = 0.0, y = 0.0;
-        if (sscanf(line, "%63s %lf %lf", id, &x, &y) < 3) continue;
+    int from_idx = -1, to_idx = -1;
+    if (!hashmap_get(ni->node_map, n1, &from_idx)) return;
+    if (!hashmap_get(ni->node_map, n2, &to_idx))   return;
 
-        int idx = -1;
-        if (hashmap_get(ni->node_map, id, &idx)) {
-            g->nodes[idx].x = x;
-            g->nodes[idx].y = y;
-        }
+    int idx = graph_add_link(g, id, from_idx, to_idx,
+                             100.0, 12.0, 100.0,
+                             LINK_TYPE_PUMP, STATUS_OPEN, false);
+    if (idx >= 0) {
+        hashmap_insert(ni->link_map, id, idx);
+        graph_add_edge(g, from_idx, to_idx, idx);
+        graph_add_edge(g, to_idx, from_idx, idx);
     }
-    return 0;
 }
 
-int parse_section_demands(FILE *fp, Graph *g, NetworkIndex *ni) {
-    char buf[LINE_BUF];
-    long pos;
-    while ((pos = ftell(fp)) >= 0 && fgets(buf, sizeof(buf), fp)) {
-        char *line = trim(buf);
-        if (is_section(line)) { fseek(fp, pos, SEEK_SET); break; }
-        if (is_skip(line)) continue;
+static void parse_line_coordinate(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64] = {0};
+    double x = 0.0, y = 0.0;
+    if (sscanf(line, "%63s %lf %lf", id, &x, &y) < 3) return;
 
-        char id[64]={0}, pattern[64]={0};
-        double demand = 0.0;
-        if (sscanf(line, "%63s %lf %63s", id, &demand, pattern) < 2) continue;
-
-        int idx = -1;
-        if (hashmap_get(ni->node_map, id, &idx))
-            g->nodes[idx].base_demand += demand;
+    int idx = -1;
+    if (hashmap_get(ni->node_map, id, &idx)) {
+        g->nodes[idx].x = x;
+        g->nodes[idx].y = y;
     }
-    return 0;
 }
 
-/* ── parse_inp_file ─────────────────────────────────────────────── */
+static void parse_line_demand(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64]={0}, pattern[64]={0};
+    double demand = 0.0;
+    if (sscanf(line, "%63s %lf %63s", id, &demand, pattern) < 2) return;
+
+    int idx = -1;
+    if (hashmap_get(ni->node_map, id, &idx))
+        g->nodes[idx].base_demand += demand;
+}
+
+/* ── Section parsers (retained for backward compatibility) ────────── */
+
+int parse_section_junctions(FILE *fp, Graph *g, NetworkIndex *ni)   { (void)fp; (void)g; (void)ni; return 0; }
+int parse_section_reservoirs(FILE *fp, Graph *g, NetworkIndex *ni)  { (void)fp; (void)g; (void)ni; return 0; }
+int parse_section_tanks(FILE *fp, Graph *g, NetworkIndex *ni)       { (void)fp; (void)g; (void)ni; return 0; }
+int parse_section_pipes(FILE *fp, Graph *g, NetworkIndex *ni)       { (void)fp; (void)g; (void)ni; return 0; }
+int parse_section_valves(FILE *fp, Graph *g, NetworkIndex *ni)      { (void)fp; (void)g; (void)ni; return 0; }
+int parse_section_coordinates(FILE *fp, Graph *g, NetworkIndex *ni) { (void)fp; (void)g; (void)ni; return 0; }
+int parse_section_demands(FILE *fp, Graph *g, NetworkIndex *ni)     { (void)fp; (void)g; (void)ni; return 0; }
+
+/* ── parse_inp_file (clean state-machine parsing without seek) ────── */
+
+typedef enum {
+    SEC_NONE = 0,
+    SEC_JUNCTIONS,
+    SEC_RESERVOIRS,
+    SEC_TANKS,
+    SEC_PIPES,
+    SEC_VALVES,
+    SEC_PUMPS,
+    SEC_COORDINATES,
+    SEC_DEMANDS,
+    SEC_END
+} InpSection;
 
 int parse_inp_file(const char *filepath, Graph *g, NetworkIndex *ni) {
     FILE *fp = fopen(filepath, "r");
     if (!fp) { fprintf(stderr, "Cannot open '%s'\n", filepath); return -1; }
 
     char buf[LINE_BUF];
+    InpSection current_sec = SEC_NONE;
+
     while (fgets(buf, sizeof(buf), fp)) {
         char *line = trim(buf);
         if (is_skip(line)) continue;
 
-        if (!is_section(line)) continue; /* Skip stray text before first section */
+        if (is_section(line)) {
+            char sec_name[64] = {0};
+            sscanf(line, "[%63[^]]", sec_name);
+            for (char *p = sec_name; *p; p++) *p = (char)toupper((unsigned char)*p);
 
-        /* Extract section name */
-        char section[64] = {0};
-        sscanf(line, "[%63[^]]", section);
-        for (char *p = section; *p; p++) *p = (char)toupper((unsigned char)*p);
+            if      (strcmp(sec_name, "JUNCTIONS")   == 0) current_sec = SEC_JUNCTIONS;
+            else if (strcmp(sec_name, "RESERVOIRS")  == 0) current_sec = SEC_RESERVOIRS;
+            else if (strcmp(sec_name, "TANKS")       == 0) current_sec = SEC_TANKS;
+            else if (strcmp(sec_name, "PIPES")       == 0) current_sec = SEC_PIPES;
+            else if (strcmp(sec_name, "VALVES")      == 0) current_sec = SEC_VALVES;
+            else if (strcmp(sec_name, "PUMPS")       == 0) current_sec = SEC_PUMPS;
+            else if (strcmp(sec_name, "COORDINATES") == 0) current_sec = SEC_COORDINATES;
+            else if (strcmp(sec_name, "DEMANDS")     == 0) current_sec = SEC_DEMANDS;
+            else if (strcmp(sec_name, "END")         == 0) break;
+            else                                           current_sec = SEC_NONE;
+            continue;
+        }
 
-        if      (strcmp(section, "JUNCTIONS")   == 0) parse_section_junctions(fp, g, ni);
-        else if (strcmp(section, "RESERVOIRS")  == 0) parse_section_reservoirs(fp, g, ni);
-        else if (strcmp(section, "TANKS")       == 0) parse_section_tanks(fp, g, ni);
-        else if (strcmp(section, "PIPES")       == 0) parse_section_pipes(fp, g, ni);
-        else if (strcmp(section, "VALVES")      == 0) parse_section_valves(fp, g, ni);
-        else if (strcmp(section, "COORDINATES") == 0) parse_section_coordinates(fp, g, ni);
-        else if (strcmp(section, "DEMANDS")     == 0) parse_section_demands(fp, g, ni);
-        else if (strcmp(section, "END")         == 0) break;
-        /* Ignore all other sections silently */
+        switch (current_sec) {
+            case SEC_JUNCTIONS:   parse_line_junction(line, g, ni);   break;
+            case SEC_RESERVOIRS:  parse_line_reservoir(line, g, ni);  break;
+            case SEC_TANKS:       parse_line_tank(line, g, ni);       break;
+            case SEC_PIPES:       parse_line_pipe(line, g, ni);       break;
+            case SEC_VALVES:      parse_line_valve(line, g, ni);      break;
+            case SEC_PUMPS:       parse_line_pump(line, g, ni);       break;
+            case SEC_COORDINATES: parse_line_coordinate(line, g, ni); break;
+            case SEC_DEMANDS:     parse_line_demand(line, g, ni);     break;
+            default: break;
+        }
     }
 
     fclose(fp);

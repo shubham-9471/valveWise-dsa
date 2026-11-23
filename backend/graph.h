@@ -9,6 +9,10 @@
 #ifndef GRAPH_H
 #define GRAPH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -68,6 +72,7 @@ typedef struct {
 
 #define LINK_TYPE_PIPE  0  /**< Ordinary pipe */
 #define LINK_TYPE_VALVE 1  /**< Isolation / control valve */
+#define LINK_TYPE_PUMP  2  /**< Booster / inline pump */
 
 #define LINK_ID_LEN 64  /**< Maximum length of a string link ID */
 
@@ -171,5 +176,9 @@ void graph_add_edge(Graph *g, int from, int to, int link_idx);
 
 /** Print a one-line summary of node count, link count, and source count. */
 void graph_print_summary(const Graph *g);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* GRAPH_H */

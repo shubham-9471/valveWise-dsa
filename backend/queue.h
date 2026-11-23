@@ -6,6 +6,10 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 
 /** Circular-buffer queue storing int values (node indices for BFS). */
@@ -41,5 +45,9 @@ bool   queue_is_empty(const Queue *q);
 
 /** Reset head/tail/size to 0 (data is not freed or zeroed). */
 void   queue_clear(Queue *q);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* QUEUE_H */

@@ -8,6 +8,10 @@
 #ifndef HEAP_H
 #define HEAP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 
 /** One element in the heap: a priority key and an associated integer (link index). */
@@ -55,5 +59,9 @@ bool  heap_is_empty(const Heap *h);
 
 /** Remove all elements without freeing memory. */
 void  heap_clear(Heap *h);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HEAP_H */

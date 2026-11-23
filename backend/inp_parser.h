@@ -6,6 +6,10 @@
 #ifndef INP_PARSER_H
 #define INP_PARSER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
 #include "graph.h"
 #include "hashmap.h"
@@ -36,5 +40,9 @@ int parse_section_pipes       (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_valves      (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_coordinates (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_demands     (FILE *fp, Graph *g, NetworkIndex *ni);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INP_PARSER_H */

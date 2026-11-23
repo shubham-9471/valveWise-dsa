@@ -9,6 +9,10 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -83,5 +87,9 @@ void hashmap_resize(HashMap *hm, size_t new_capacity);
 
 /** Print capacity, live size, and current load factor to stdout. */
 void hashmap_print_stats(const HashMap *hm);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HASHMAP_H */
