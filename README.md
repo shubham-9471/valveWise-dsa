@@ -17,10 +17,25 @@ ValveWise/
 │   ├── optimizer.h / optimizer.c # Greedy, Random, Topology, and Exhaustive valve placement
 │   ├── inp_parser.h / inp_parser.c # EPANET-style .inp network file parser
 │   ├── json_output.h / json_output.c # Dynamic string buffer JSON serializer
-│   ├── main.c                    # CLI entrypoint and argument parsing
-│   └── Makefile                  # Compilation targets with strict C11 flags
+│   ├── main.c                    # C CLI entrypoint and argument parsing
+│   └── Makefile                  # Backend C11 compilation targets
+├── include/
+│   ├── epanet2_2.h               # OWA-EPANET 2.2+ thread-safe C header
+│   ├── epanet2_enums.h           # OWA-EPANET property & object enumerations
+│   └── EpanetEngine.hpp          # Modern C++ RAII wrapper class for OWA-EPANET
+├── src/
+│   ├── EpanetEngine.cpp          # In-memory hydraulic simulation & valve control methods
+│   ├── epanet_core_runtime.c     # Standalone OWA-EPANET 2.2 C ABI compatible simulation runtime
+│   └── main.cpp                  # C++ test runner & demonstration executable
+├── docs/
+│   ├── Doxyfile                  # Doxygen configuration file
+│   ├── DoxygenLayout.xml         # Modernized Doxygen layout specification
+│   └── doxygen-awesome.css       # Clean stylesheet for documentation pages
 ├── data/
-│   └── sample.inp                # Sample WDN (reservoirs, tank, junctions, pipes, valves)
+│   ├── sample.inp                # Sample WDN (reservoirs, tank, junctions, pipes, valves)
+│   └── net_image3.inp            # Topologically verified test network (diagram image 3)
+├── CMakeLists.txt                # Cross-platform CMake configuration for C & C++
+├── Makefile                      # Top-level root Makefile
 ├── .gitignore                    # Ignores object files, binaries, and test outputs
 └── README.md                     # Documentation and usage guide
 ```
@@ -73,9 +88,40 @@ ValveWise/
 ## 🛠️ How to Compile & Run
 
 ### Prerequisites
-- GCC supporting C11 (Linux/macOS or MinGW-w64 on Windows via MSYS2).
+- GCC / G++ supporting C11 and C++17 (Linux/macOS or MinGW-w64 on Windows).
+- CMake 3.12+ (optional for CMake-based builds).
+- Doxygen 1.9+ (optional for generating HTML documentation).
 
-### Build Commands
+### Quick Build & Run (Root Makefile)
+Run from the root `ValveWise/` directory:
+```bash
+# Build C++ simulation engine and C backend
+make all
+
+# Run test on the Image 3 topology network (R1 -> PUMP -> J1 with T1, J2, J3)
+make test-image3
+
+# Run test on the sample 11-node network
+make test-sample
+```
+*On Windows with MinGW:*
+```powershell
+mingw32-make all
+mingw32-make test-image3
+```
+
+### Direct C++ Simulation CLI Usage
+```bash
+./valvewise-sim data/net_image3.inp
+```
+Output features:
+- In-memory execution (empty report & binary output paths `""` to prevent writing `.rpt` files to disk).
+- Instantaneous hydraulic solver (`EN_solveH`) reporting heads, pressures, demands, flows, and velocities.
+- Step-by-step extended-period time loop (`EN_runH` / `EN_nextH`).
+- Dynamic valve/pipe closure demonstration (`closeLink("P1")`) verifying flow drops to 0 and reroutes.
+- Clean error trapping for `errcode > 100` and automatic RAII cleanup (`EN_deleteproject`).
+
+### C Backend Build & CLI Usage
 Navigate to the `backend/` directory:
 ```bash
 cd backend
@@ -83,12 +129,12 @@ make clean && make
 ```
 *On Windows with MinGW:*
 ```powershell
+cd backend
 mingw32-make clean
 mingw32-make
 ```
 
-### Running Simulations
-
+Running backend simulation scenarios:
 1. **Default Full Run (Runs structural analysis, ranking, and all 4 optimization baselines)**:
    ```bash
    ./valvewise --input ../data/sample.inp --output output.json --verbose
@@ -101,14 +147,17 @@ mingw32-make
    ```bash
    ./valvewise --input ../data/sample.inp --fail P3,P7 --stuck V1 --budget 5 --output test_multi.json --verbose
    ```
-4. **Custom Budget and Random Seed**:
+4. **Test on Image 3 Topology**:
    ```bash
-   ./valvewise --input ../data/sample.inp --budget 2 --seed 123 --verbose
+   ./valvewise --input ../data/net_image3.inp --fail P1 --verbose
    ```
-5. **Zero Budget Edge Case**:
-   ```bash
-   ./valvewise --input ../data/sample.inp --budget 0 --verbose
-   ```
+
+### 📚 Generating Doxygen Documentation
+```bash
+cd docs
+doxygen Doxyfile
+```
+The modern HTML documentation styled with `doxygen-awesome.css` will be generated in `docs/html/html/index.html`.
 
 ---
 

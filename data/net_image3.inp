@@ -1,0 +1,142 @@
+[TITLE]
+ValveWise OWA-EPANET Test Network - Topology from User Diagram (Image 3)
+Topology:
+  R1 (Reservoir) -> PUMP -> J1
+  J1 -> P2 -> T1 (Storage Tank)
+  J1 -> P1 -> J2 (Junction)
+  J1 -> P3 -> J3 (Junction)
+  J2 -> P4 -> J3 (Junction)
+
+[JUNCTIONS]
+;ID              Elev         Demand       Pattern
+J1               100.0        0.0          ; Junction 1 (Hub)
+J2               90.0         15.0         ; Junction 2 (Consumer Zone A)
+J3               95.0         20.0         ; Junction 3 (Consumer Zone B)
+
+[RESERVOIRS]
+;ID              Head         Pattern
+R1               100.0        ; Primary water source
+
+[TANKS]
+;ID              Elevation    InitLevel    MinLevel    MaxLevel    Diameter    MinVol    VolCurve
+T1               130.0        5.0          1.0         15.0        30.0        0         ; Elevated storage tank
+
+[PIPES]
+;ID              Node1        Node2        Length      Diameter    Roughness   MinorLoss  Status
+P1               J1           J2           1000        12          100         0          OPEN
+P2               J1           T1           500         12          100         0          OPEN
+P3               J1           J3           1500        10          100         0          OPEN
+P4               J2           J3           1200        8           100         0          OPEN
+
+[PUMPS]
+;ID              Node1        Node2        Parameters
+PUMP             R1           J1           HEAD 1
+
+[VALVES]
+;ID              Node1        Node2        Diameter    Type    Setting    MinorLoss
+
+[TAGS]
+
+[DEMANDS]
+;Junction        Demand       Pattern      Category
+
+[STATUS]
+;ID              Status/Setting
+
+[PATTERNS]
+;ID              Multipliers
+1                1.0   1.2   1.1   0.9   0.8   1.0
+
+[CURVES]
+;ID              X-Value      Y-Value
+; Pump 1 Head Curve: Flow (GPM) vs Head (ft)
+1                0            150.0
+1                500          130.0
+1                1000         95.0
+
+[CONTROLS]
+; Automatically close pump if tank is full
+LINK PUMP CLOSED IF NODE T1 ABOVE 14.5
+LINK PUMP OPEN IF NODE T1 BELOW 3.0
+
+[RULES]
+
+[ENERGY]
+Global Efficiency  75.0
+Global Price       0.12
+Demand Charge      0.0
+
+[EMITTERS]
+
+[QUALITY]
+;Node            InitQual
+R1               1.0
+T1               0.8
+J1               0.0
+J2               0.0
+J3               0.0
+
+[SOURCES]
+
+[REACTIONS]
+;Type            Pipe/Tank    Coefficient
+
+[REACTIONS]
+Order Bulk            1
+Order Wall            1
+Global Bulk           -0.5
+Global Wall           -1.0
+Limiting Potential    0.0
+Roughness Correlation 0.0
+
+[MIXING]
+
+[TIMES]
+Duration              24:00
+Hydraulic Timestep    1:00
+Quality Timestep      0:05
+Pattern Timestep      1:00
+Pattern Start         0:00
+Report Timestep       1:00
+Report Start          0:00
+Start ClockTime       12 am
+Statistic             None
+
+[REPORT]
+Status                No
+Summary               No
+Page                  0
+
+[OPTIONS]
+Units                 GPM
+Headloss              H-W
+Specific Gravity      1.0
+Viscosity             1.0
+Trials                40
+Accuracy              0.001
+CHECKFREQ             2
+MAXCHECK              10
+DAMPLIMIT             0
+Unbalanced            Continue 10
+Pattern               1
+Demand Multiplier     1.0
+Emitter Exponent      0.5
+Quality               Chemical mg/L
+Diffusivity           1.0
+Tolerance             0.01
+
+[COORDINATES]
+;Node            X-Coord         Y-Coord
+R1               1000.00         5000.00
+J1               4000.00         5000.00
+T1               4000.00         7000.00
+J2               4000.00         1500.00
+J3               7500.00         4800.00
+
+[VERTICES]
+
+[LABELS]
+
+[BACKDROP]
+
+[END]

@@ -137,6 +137,24 @@ static void parse_line_valve(const char *line, Graph *g, NetworkIndex *ni) {
     }
 }
 
+static void parse_line_pump(const char *line, Graph *g, NetworkIndex *ni) {
+    char id[64]={0}, n1[64]={0}, n2[64]={0};
+    if (sscanf(line, "%63s %63s %63s", id, n1, n2) < 3) return;
+
+    int from_idx = -1, to_idx = -1;
+    if (!hashmap_get(ni->node_map, n1, &from_idx)) return;
+    if (!hashmap_get(ni->node_map, n2, &to_idx))   return;
+
+    int idx = graph_add_link(g, id, from_idx, to_idx,
+                             100.0, 12.0, 100.0,
+                             LINK_TYPE_PUMP, STATUS_OPEN, false);
+    if (idx >= 0) {
+        hashmap_insert(ni->link_map, id, idx);
+        graph_add_edge(g, from_idx, to_idx, idx);
+        graph_add_edge(g, to_idx, from_idx, idx);
+    }
+}
+
 static void parse_line_coordinate(const char *line, Graph *g, NetworkIndex *ni) {
     char id[64] = {0};
     double x = 0.0, y = 0.0;
@@ -178,6 +196,7 @@ typedef enum {
     SEC_TANKS,
     SEC_PIPES,
     SEC_VALVES,
+    SEC_PUMPS,
     SEC_COORDINATES,
     SEC_DEMANDS,
     SEC_END
@@ -204,6 +223,7 @@ int parse_inp_file(const char *filepath, Graph *g, NetworkIndex *ni) {
             else if (strcmp(sec_name, "TANKS")       == 0) current_sec = SEC_TANKS;
             else if (strcmp(sec_name, "PIPES")       == 0) current_sec = SEC_PIPES;
             else if (strcmp(sec_name, "VALVES")      == 0) current_sec = SEC_VALVES;
+            else if (strcmp(sec_name, "PUMPS")       == 0) current_sec = SEC_PUMPS;
             else if (strcmp(sec_name, "COORDINATES") == 0) current_sec = SEC_COORDINATES;
             else if (strcmp(sec_name, "DEMANDS")     == 0) current_sec = SEC_DEMANDS;
             else if (strcmp(sec_name, "END")         == 0) break;
@@ -217,6 +237,7 @@ int parse_inp_file(const char *filepath, Graph *g, NetworkIndex *ni) {
             case SEC_TANKS:       parse_line_tank(line, g, ni);       break;
             case SEC_PIPES:       parse_line_pipe(line, g, ni);       break;
             case SEC_VALVES:      parse_line_valve(line, g, ni);      break;
+            case SEC_PUMPS:       parse_line_pump(line, g, ni);       break;
             case SEC_COORDINATES: parse_line_coordinate(line, g, ni); break;
             case SEC_DEMANDS:     parse_line_demand(line, g, ni);     break;
             default: break;

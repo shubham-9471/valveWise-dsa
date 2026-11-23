@@ -6,8 +6,14 @@ backend/*.o
 # Binaries
 valvewise
 valvewise.exe
+valvewise-sim
+valvewise-sim.exe
 backend/valvewise
 backend/valvewise.exe
+
+# Documentation build output
+docs/html/
+build/
 
 # Output JSON files
 output.json

@@ -68,6 +68,7 @@ typedef struct {
 
 #define LINK_TYPE_PIPE  0  /**< Ordinary pipe */
 #define LINK_TYPE_VALVE 1  /**< Isolation / control valve */
+#define LINK_TYPE_PUMP  2  /**< Booster / inline pump */
 
 #define LINK_ID_LEN 64  /**< Maximum length of a string link ID */
 
