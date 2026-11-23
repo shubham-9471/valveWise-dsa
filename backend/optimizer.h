@@ -40,8 +40,7 @@ typedef struct {
     char    algorithm_name[64];
 } PlacementResult;
 
-/* ── Full optimization comparison ──────────────────────────────────── */
-
+/* Full optimization comparison */
 typedef struct {
     PlacementResult *greedy;
     PlacementResult *random_pl;
@@ -50,51 +49,33 @@ typedef struct {
     int              budget;
 } OptimizationReport;
 
-/* ── Function prototypes ────────────────────────────────────────────── */
+/* Function prototypes */
+RankedLink      *rank_links(const Graph *g,
+                           const StructuralResult *sr,
+                           RankMode mode,
+                           int *out_count);
 
-/**
- * rank_links — score every link by the given RankMode.
- * @param out_count  set to the number of RankedLink entries returned
- * @return heap-allocated array sorted descending by score; caller frees.
- */
-RankedLink *rank_links(const Graph *g,
-                       const StructuralResult *sr,
-                       RankMode mode,
-                       int *out_count);
-
-/**
- * compute_total_disruption — temporarily mark valve_links as has_valve=true,
- * then for each failure scenario simulate, isolate, and sum disrupted demand.
- * Restores has_valve flags before returning.
- */
 double compute_total_disruption(Graph *g,
                                 const int *valve_links, int valve_count,
                                 const int *failure_scenarios, int scenario_count);
 
-/** Greedy marginal-gain valve placement. */
 PlacementResult *optimize_greedy(Graph *g, int budget,
                                   const int *failure_scenarios, int scenario_count);
 
-/** Random valve placement (baseline). */
 PlacementResult *optimize_random(Graph *g, int budget,
                                   const int *failure_scenarios, int scenario_count,
                                   unsigned int seed);
 
-/** Topology-based placement: bridges first, then high-degree links. */
 PlacementResult *optimize_topology(Graph *g, int budget,
                                     const StructuralResult *sr);
 
-/**
- * optimize_exhaustive — enumerate C(n,k) subsets.
- * Returns NULL if the number of combinations exceeds 500 000.
- */
 PlacementResult *optimize_exhaustive(Graph *g, int budget,
                                       const int *failure_scenarios, int scenario_count);
 
-/** Run all four algorithms and return a combined report. */
 OptimizationReport *run_full_optimization(Graph *g, int budget,
                                            const int *failure_scenarios, int scenario_count,
-                                           const StructuralResult *sr);
+                                           const StructuralResult *sr,
+                                           unsigned int seed);
 
 void free_placement_result(PlacementResult *pr);
 void free_optimization_report(OptimizationReport *report);

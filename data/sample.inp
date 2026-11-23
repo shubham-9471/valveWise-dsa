@@ -1,0 +1,69 @@
+[TITLE]
+ValveWise Sample Water Distribution Network (8 Junctions, 2 Reservoirs, 1 Tank)
+
+[JUNCTIONS]
+;ID              Elev         Demand       Pattern
+J1               45.0         10.5         ;
+J2               42.0         15.0         ;
+J3               40.0         8.0          ;
+J4               38.5         12.0         ;
+J5               36.0         14.5         ;
+J6               35.0         7.0          ;
+J7               34.0         11.0         ;
+J8               32.0         9.0          ;
+
+[RESERVOIRS]
+;ID              Head         Pattern
+R1               60.0         ;
+R2               55.0         ;
+
+[TANKS]
+;ID              Elev         InitLvl      MinLvl       MaxLvl       Diam         MinVol       VolCurve
+T1               50.0         5.0          1.0          10.0         20.0         0.0          ;
+
+[PIPES]
+;ID              Node1        Node2        Length       Diameter     Roughness    MinorLoss    Status
+P1               R1           J1           300.0        250.0        100.0        0.0          OPEN
+P2               R2           J2           250.0        200.0        100.0        0.0          OPEN
+P3               T1           J3           200.0        200.0        100.0        0.0          OPEN
+P4               J1           J2           180.0        150.0        100.0        0.0          OPEN
+P5               J1           J4           220.0        150.0        100.0        0.0          OPEN
+P6               J2           J3           210.0        150.0        100.0        0.0          OPEN
+P7               J3           J5           260.0        150.0        100.0        0.0          OPEN
+P8               J4           J5           190.0        125.0        100.0        0.0          OPEN
+P9               J4           J6           310.0        100.0        100.0        0.0          OPEN
+P10              J5           J7           290.0        100.0        100.0        0.0          OPEN
+P11              J6           J8           240.0        100.0        100.0        0.0          OPEN
+P12              J7           J8           230.0        100.0        100.0        0.0          OPEN
+
+[VALVES]
+;ID              Node1        Node2        Diameter     Type         Setting      MinorLoss
+V1               J6           J7           100.0        TCV          0.0          0.0
+V2               J2           J5           150.0        PRV          30.0         0.0
+
+[DEMANDS]
+;Junction        Demand       Pattern      Category
+J1               10.5
+J2               15.0
+J3               8.0
+J4               12.0
+J5               14.5
+J6               7.0
+J7               11.0
+J8               9.0
+
+[COORDINATES]
+;Node            X-Coord      Y-Coord
+R1               50.0         450.0
+R2               50.0         150.0
+T1               200.0        300.0
+J1               200.0        450.0
+J2               200.0        150.0
+J3               350.0        300.0
+J4               350.0        450.0
+J5               500.0        300.0
+J6               500.0        450.0
+J7               650.0        300.0
+J8               650.0        450.0
+
+[END]

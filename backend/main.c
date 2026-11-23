@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
         if (verbose) fprintf(stderr, "[6/6] Running optimization (budget=%d)...\n", budget);
         report = run_full_optimization(g, budget,
                                        failed_link_indices, fli_count,
-                                       sr);
+                                       sr, seed);
     }
 
     /* ── 9. Serialize and write JSON ───────────────────────────── */

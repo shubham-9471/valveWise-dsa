@@ -3,6 +3,8 @@
  * Teammate B owns this file.
  */
 
+#define _POSIX_C_SOURCE 199309L
+
 #include "optimizer.h"
 #include "isolation.h"
 #include "heap.h"
@@ -462,12 +464,13 @@ PlacementResult *optimize_exhaustive(Graph *g, int budget,
 
 OptimizationReport *run_full_optimization(Graph *g, int budget,
                                            const int *failure_scenarios, int scenario_count,
-                                           const StructuralResult *sr) {
+                                           const StructuralResult *sr,
+                                           unsigned int seed) {
     OptimizationReport *report = calloc(1, sizeof(OptimizationReport));
     if (!report) return NULL;
     report->budget     = budget;
     report->greedy     = optimize_greedy(g, budget, failure_scenarios, scenario_count);
-    report->random_pl  = optimize_random(g, budget, failure_scenarios, scenario_count, 42);
+    report->random_pl  = optimize_random(g, budget, failure_scenarios, scenario_count, seed);
     report->topology   = optimize_topology(g, budget, sr);
     report->exhaustive = optimize_exhaustive(g, budget, failure_scenarios, scenario_count);
     return report;

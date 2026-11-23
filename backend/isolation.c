@@ -76,12 +76,16 @@ ReachabilityResult *compute_reachability(const Graph *g) {
     for (int i = 0; i < g->node_count; i++) {
         if (!r->reachable[i]) {
             if (disc_cnt >= disc_cap) {
-                disc_cap *= 2;
-                int *tmp = realloc(disc, (size_t)disc_cap * sizeof(int));
-                if (!tmp) break;
-                disc = tmp;
+                int new_cap = disc_cap * 2;
+                int *tmp = realloc(disc, (size_t)new_cap * sizeof(int));
+                if (tmp) {
+                    disc = tmp;
+                    disc_cap = new_cap;
+                }
             }
-            disc[disc_cnt++] = i;
+            if (disc_cnt < disc_cap) {
+                disc[disc_cnt++] = i;
+            }
             total_demand += g->nodes[i].base_demand;
         }
     }
@@ -172,11 +176,16 @@ IsolationResult *compute_isolation(Graph *g,
                             if (lnk->status == STATUS_STUCK) {
                                 /* Stuck-open: cannot close; record extra disruption on the far node */
                                 if (ed_cnt >= ed_cap) {
-                                    ed_cap *= 2;
-                                    int *tmp = realloc(extra_disrupted, (size_t)ed_cap * sizeof(int));
-                                    if (tmp) extra_disrupted = tmp;
+                                    int new_cap = ed_cap * 2;
+                                    int *tmp = realloc(extra_disrupted, (size_t)new_cap * sizeof(int));
+                                    if (tmp) {
+                                        extra_disrupted = tmp;
+                                        ed_cap = new_cap;
+                                    }
                                 }
-                                extra_disrupted[ed_cnt++] = e->to;
+                                if (ed_cnt < ed_cap) {
+                                    extra_disrupted[ed_cnt++] = e->to;
+                                }
                                 /* Continue BFS past stuck valve */
                                 if (!node_visited[e->to]) {
                                     node_visited[e->to] = true;
@@ -185,11 +194,16 @@ IsolationResult *compute_isolation(Graph *g,
                             } else {
                                 /* Operable valve — add to close list */
                                 if (vtc_cnt >= vtc_cap) {
-                                    vtc_cap *= 2;
-                                    int *tmp = realloc(valves_to_close, (size_t)vtc_cap * sizeof(int));
-                                    if (tmp) valves_to_close = tmp;
+                                    int new_cap = vtc_cap * 2;
+                                    int *tmp = realloc(valves_to_close, (size_t)new_cap * sizeof(int));
+                                    if (tmp) {
+                                        valves_to_close = tmp;
+                                        vtc_cap = new_cap;
+                                    }
                                 }
-                                valves_to_close[vtc_cnt++] = e->link_idx;
+                                if (vtc_cnt < vtc_cap) {
+                                    valves_to_close[vtc_cnt++] = e->link_idx;
+                                }
                             }
                         }
                         /* Do NOT continue BFS through a closeable valve */
@@ -215,21 +229,40 @@ IsolationResult *compute_isolation(Graph *g,
     r->extra_disrupted        = extra_disrupted;
     r->extra_disrupted_count  = ed_cnt;
 
-    /* Temporarily apply isolation to compute total disrupted demand */
-    for (int i = 0; i < vtc_cnt; i++)
+    /* Save previous link statuses before applying isolation */
+    LinkStatus *prev_valve_status = malloc((size_t)vtc_cnt * sizeof(LinkStatus));
+    LinkStatus *prev_failed_status = malloc((size_t)failed_count * sizeof(LinkStatus));
+    if (!prev_valve_status || !prev_failed_status) {
+        free(prev_valve_status);
+        free(prev_failed_status);
+        free(valves_to_close);
+        free(extra_disrupted);
+        free(r->failed_links);
+        free(r);
+        return NULL;
+    }
+
+    for (int i = 0; i < vtc_cnt; i++) {
+        prev_valve_status[i] = g->links[valves_to_close[i]].status;
         g->links[valves_to_close[i]].status = STATUS_CLOSED;
-    for (int fi = 0; fi < failed_count; fi++)
+    }
+    for (int fi = 0; fi < failed_count; fi++) {
+        prev_failed_status[fi] = g->links[failed_links[fi]].status;
         g->links[failed_links[fi]].status = STATUS_BURST;
+    }
 
     ReachabilityResult *reach = compute_reachability(g);
     r->total_disrupted_demand = reach ? reach->disconnected_demand : 0.0;
     free_reachability(reach);
 
-    /* Restore statuses */
+    /* Restore original statuses accurately */
     for (int i = 0; i < vtc_cnt; i++)
-        g->links[valves_to_close[i]].status = STATUS_OPEN;
+        g->links[valves_to_close[i]].status = prev_valve_status[i];
     for (int fi = 0; fi < failed_count; fi++)
-        g->links[failed_links[fi]].status = STATUS_OPEN;
+        g->links[failed_links[fi]].status = prev_failed_status[fi];
+
+    free(prev_valve_status);
+    free(prev_failed_status);
 
     return r;
 }
@@ -281,11 +314,16 @@ static void dfs_tarjan(TarjanCtx *ctx, int u) {
             if (ctx->low[v] > ctx->disc[u]) {
                 /* lnk_idx is a bridge */
                 if (ctx->bridge_cnt >= ctx->bridge_cap) {
-                    ctx->bridge_cap *= 2;
-                    int *tmp = realloc(ctx->bridges, (size_t)ctx->bridge_cap * sizeof(int));
-                    if (tmp) ctx->bridges = tmp;
+                    int new_cap = ctx->bridge_cap * 2;
+                    int *tmp = realloc(ctx->bridges, (size_t)new_cap * sizeof(int));
+                    if (tmp) {
+                        ctx->bridges = tmp;
+                        ctx->bridge_cap = new_cap;
+                    }
                 }
-                ctx->bridges[ctx->bridge_cnt++] = lnk_idx;
+                if (ctx->bridge_cnt < ctx->bridge_cap) {
+                    ctx->bridges[ctx->bridge_cnt++] = lnk_idx;
+                }
             }
 
             /* Articulation point check */
@@ -377,11 +415,16 @@ StructuralResult *compute_structural_analysis(const Graph *g) {
     for (int i = 0; i < n; i++) {
         if (ctx.ap[i]) {
             if (ctx.ap_cnt >= ctx.ap_cap) {
-                ctx.ap_cap *= 2;
-                int *tmp = realloc(ctx.ap_arr, (size_t)ctx.ap_cap * sizeof(int));
-                if (tmp) ctx.ap_arr = tmp;
+                int new_cap = ctx.ap_cap * 2;
+                int *tmp = realloc(ctx.ap_arr, (size_t)new_cap * sizeof(int));
+                if (tmp) {
+                    ctx.ap_arr = tmp;
+                    ctx.ap_cap = new_cap;
+                }
             }
-            ctx.ap_arr[ctx.ap_cnt++] = i;
+            if (ctx.ap_cnt < ctx.ap_cap) {
+                ctx.ap_arr[ctx.ap_cnt++] = i;
+            }
         }
     }
 

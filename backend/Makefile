@@ -80,6 +80,10 @@ test-multi: $(TARGET)
 
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
+ifeq ($(OS),Windows_NT)
+	-cmd /c del /q $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json 2>nul
+else
 	rm -f $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json
+endif
 
 .PHONY: all run test test-multi clean
