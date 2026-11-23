@@ -29,3 +29,6 @@ backend/test_multi.json
 Thumbs.db
 .vscode/
 .idea/
+
+# Documentation exports
+*.docx
