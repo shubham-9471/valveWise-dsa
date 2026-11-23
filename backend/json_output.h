@@ -6,6 +6,10 @@
 #ifndef JSON_OUTPUT_H
 #define JSON_OUTPUT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "graph.h"
 #include "isolation.h"
 #include "optimizer.h"
@@ -44,5 +48,9 @@ int   json_write_to_file(const char *filepath, const char *json_str);
 
 /** Free a string returned by any json_* function. */
 void  json_free(char *json_str);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* JSON_OUTPUT_H */

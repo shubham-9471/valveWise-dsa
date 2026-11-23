@@ -6,6 +6,10 @@
 #ifndef OPTIMIZER_H
 #define OPTIMIZER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "graph.h"
 #include "heap.h"
 #include "isolation.h"
@@ -79,5 +83,9 @@ OptimizationReport *run_full_optimization(Graph *g, int budget,
 
 void free_placement_result(PlacementResult *pr);
 void free_optimization_report(OptimizationReport *report);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* OPTIMIZER_H */

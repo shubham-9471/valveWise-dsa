@@ -1,140 +1,154 @@
 /**
  * @file main.cpp
- * @brief Starter C++ test runner for ValveWise OWA-EPANET Toolkit integration.
+ * @brief ValveWise entry point — demonstrates both EPANET-only and integrated DSA+EPANET pipelines.
  *
- * Demonstrates:
- *  1. EN_createproject and in-memory EN_open (empty rpt/out paths to suppress disk files).
- *  2. Running hydraulic simulations (both EN_solveH and step-by-step EN_openH/EN_initH/EN_runH/EN_nextH/EN_closeH).
- *  3. In-memory reading and verification of node pressures, heads, demands, and link flows/velocities.
- *  4. Clean error checking (errcode > 100) and automatic RAII cleanup via EN_deleteproject.
- *  5. Dynamic link/valve closure for failure simulation and isolation boundary analysis.
+ * Mode A (default): Uses IntegratedAnalysis to run the full wired pipeline:
+ *   inp_parser → graph/isolation/optimizer (C DSA) → EpanetEngine (C++ hydraulics)
+ *
+ * Mode B (--epanet-only): Uses EpanetEngine directly without the DSA backend,
+ *   equivalent to the previous standalone EPANET demo.
+ *
+ * Usage:
+ *   valvewise-sim [<path.inp>] [--epanet-only]
  *
  * @author ValveWise Development Team
  * @date 2026
  */
 
 #include "EpanetEngine.hpp"
+#include "ValveWiseIntegrated.hpp"
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <fstream>
 
-static std::string resolveInputPath(int argc, char* argv[]) {
-    if (argc > 1) {
-        return argv[1];
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+static std::string resolveInputPath(int argc, char *argv[]) {
+    // Skip flag arguments when looking for the .inp path
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a.rfind("--", 0) != 0) {   // not a flag
+            return a;
+        }
     }
-
-    // Default search paths for test networks
-    std::vector<std::string> searchPaths = {
-        "data/net_image3.inp",
-        "../data/net_image3.inp",
-        "data/sample.inp",
-        "../data/sample.inp"
-    };
-
-    for (const auto& path : searchPaths) {
-        std::ifstream f(path.c_str());
-        if (f.good()) return path;
+    // Default search paths
+    for (const char *p : {"data/net_image3.inp", "../data/net_image3.inp",
+                          "data/sample.inp",      "../data/sample.inp"}) {
+        std::ifstream f(p);
+        if (f.good()) return p;
     }
-
     return "data/net_image3.inp";
 }
 
-int main(int argc, char* argv[]) {
-    std::cout << "==============================================================\n";
-    std::cout << "      ValveWise: OWA-EPANET 2.2+ C++ Simulation Engine         \n";
-    std::cout << "==============================================================\n";
+static bool hasFlag(int argc, char *argv[], const char *flag) {
+    for (int i = 1; i < argc; ++i)
+        if (std::string(argv[i]) == flag)
+            return true;
+    return false;
+}
 
-    std::string inpPath = resolveInputPath(argc, argv);
-    std::cout << "[Step 1] Initializing EPANET Project and opening network:\n";
-    std::cout << "         Path: " << inpPath << "\n";
+// ── EPANET-only demo (kept for regression / quick smoke test) ─────────────────
+static int runEpanetOnlyDemo(const std::string &inpPath) {
+    std::cout << "\n[Mode B] Running EPANET-only engine demo...\n";
 
-    try {
-        // 1. RAII construction initializes EN_createproject
-        ValveWise::EpanetEngine engine;
+    ValveWise::EpanetEngine engine;
+    if (!engine.open(inpPath, "", "")) {
+        std::cerr << "[Error] Failed to open: " << inpPath << "\n";
+        return 1;
+    }
+    engine.printNetworkSummary(std::cout);
 
-        // 2. Open network with "" report and binary output paths -> 100% in-memory
-        if (!engine.open(inpPath, "", "")) {
-            std::cerr << "[Error] Failed to open network file '" << inpPath << "'. Exiting.\n";
-            return 1;
-        }
+    std::cout << "[Step] Running EN_solveH...\n";
+    if (!engine.solveH()) {
+        std::cerr << "[Error] Hydraulic solver failed.\n";
+        return 1;
+    }
+    engine.printHydraulicResults(std::cout);
 
-        // 3. Print network topology overview
-        engine.printNetworkSummary(std::cout);
+    std::cout << "[Step] Step-by-step time loop...\n";
+    int stepCount = 0;
+    engine.runHydraulicsStepByStep([&](long t, long dt) {
+        ++stepCount;
+        if ((t / 3600) % 6 == 0 || dt == 0)
+            std::cout << "  Hour " << (t / 3600) << ":00  dt="
+                      << (dt / 3600.0) << " hr\n";
+    });
+    std::cout << "  Completed " << stepCount << " timesteps.\n\n";
 
-        // 4. Run Steady-State Hydraulic Simulation (EN_solveH)
-        std::cout << "[Step 2] Executing steady-state hydraulic solver (EN_solveH)...\n";
-        if (!engine.solveH()) {
-            std::cerr << "[Error] Hydraulic solver failed.\n";
-            return 1;
-        }
-        std::cout << "         Hydraulic solution converged successfully in memory.\n";
+    // Close P1 / re-solve demo
+    std::cout << "[Step] Closing P1 (burst pipe simulation)...\n";
+    if (engine.closeLink("P1")) {
+        engine.solveH();
+        std::cout << "  P1 flow = " << engine.getLinkFlow("P1") << " gpm (should be 0)\n";
+        std::cout << "  P3 flow = " << engine.getLinkFlow("P3") << " gpm (bypass)\n";
+        engine.openLink("P1");
+    }
 
-        // 5. Read and display in-memory node and link results
-        std::cout << "[Step 3] Reading node and link values directly from memory:\n";
-        engine.printHydraulicResults(std::cout);
+    // Error-code demo
+    double dummy = 0.0;
+    int err = EN_getnodevalue(engine.getProjectHandle(), 9999, EN_PRESSURE, &dummy);
+    if (err > 100)
+        std::cout << "[Step] Caught expected error (" << err << "): "
+                  << engine.getErrorMessage(err) << "\n";
 
-        // 6. Extended-Period Simulation (Step-by-step EN_openH / EN_initH / EN_runH / EN_nextH / EN_closeH)
-        std::cout << "[Step 4] Executing step-by-step time loop (EN_runH / EN_nextH)...\n";
-        int stepCount = 0;
-        bool stepSuccess = engine.runHydraulicsStepByStep([&](long currentTime, long tstep) {
-            stepCount++;
-            long hours = currentTime / 3600;
-            if (hours % 6 == 0 || tstep == 0) { // log every 6 simulation hours
-                std::cout << "         Hour " << hours << ":00 (Timestep: "
-                          << (tstep / 360) / 10.0 << " hrs) - Hydraulics Balanced.\n";
-            }
-        });
+    engine.close();
+    return 0;
+}
 
-        if (stepSuccess) {
-            std::cout << "         Completed " << stepCount << " simulation timesteps.\n\n";
-        }
+// ── Integrated DSA + EPANET pipeline demo ────────────────────────────────────
+static int runIntegratedDemo(const std::string &inpPath) {
+    std::cout << "\n[Mode A] Running integrated C-DSA + EPANET pipeline...\n\n";
 
-        // 7. Demonstration of Valve/Link Closure for Pipe Failure & Isolation
-        std::cout << "[Step 5] Demonstrating dynamic link closure for burst pipe isolation:\n";
-        std::string failPipe = "P1";
-        std::cout << "         Closing pipe '" << failPipe << "' (setting EN_STATUS = EN_CLOSED)...\n";
-        if (engine.closeLink(failPipe)) {
-            std::cout << "         Pipe '" << failPipe << "' status set to CLOSED.\n";
+    ValveWise::IntegratedOptions opts;
+    opts.budget    = 3;
+    opts.seed      = 42;
+    opts.verbose   = true;
+    opts.jsonOutput = "";           // set to "output.json" to serialize
 
-            // Re-solve hydraulics with pipe P1 closed
-            engine.solveH();
+    ValveWise::IntegratedAnalysis analysis(inpPath, opts);
 
-            double flowP1 = engine.getLinkFlow(failPipe);
-            std::cout << "         Re-evaluated flow through " << failPipe << ": "
-                      << flowP1 << " gpm (isolated successfully).\n";
-
-            // Show updated flow along alternative paths
-            std::cout << "         Flow along alternative pipe P3: "
-                      << engine.getLinkFlow("P3") << " gpm\n";
-
-            // Restore pipe
-            engine.openLink(failPipe);
-            std::cout << "         Restored pipe '" << failPipe << "' to OPEN.\n\n";
-        }
-
-        // 8. Error checking demonstration
-        std::cout << "[Step 6] Testing clean error verification (errcode > 100):\n";
-        int invalidIdx = 9999;
-        double dummyVal = 0.0;
-        int err = EN_getnodevalue(engine.getProjectHandle(), invalidIdx, EN_PRESSURE, &dummyVal);
-        if (err > 100) {
-            std::cout << "         Cleanly caught expected error (" << err << "): "
-                      << engine.getErrorMessage(err) << "\n";
-        }
-
-        std::cout << "\n[Step 7] Freeing project resources (EN_deleteproject)...\n";
-        engine.close();
-        // EpanetEngine destructor will call EN_deleteproject(m_ph) safely
-
-        std::cout << "==============================================================\n";
-        std::cout << "          ValveWise EPANET Toolkit Test Finished              \n";
-        std::cout << "==============================================================\n";
-
-    } catch (const std::exception& ex) {
-        std::cerr << "[Exception caught] " << ex.what() << "\n";
+    std::cout << "--- loadNetwork() ---\n";
+    if (!analysis.loadNetwork()) {
+        std::cerr << "[Error] loadNetwork() failed.\n";
         return 1;
     }
 
+    std::cout << "\n--- solveBaselineHydraulics() ---\n";
+    if (!analysis.solveBaselineHydraulics()) {
+        std::cerr << "[Error] Baseline hydraulic solve failed.\n";
+        return 1;
+    }
+
+    std::cout << "\n--- runFailureScenario({\"P1\"}) ---\n";
+    auto result = analysis.runFailureScenario({"P1"});
+    analysis.printResult(result, std::cout);
+
+    if (!result.success) {
+        std::cerr << "[Error] Scenario pipeline failed.\n";
+        return 1;
+    }
+
+    std::cout << "[Mode A] Integrated pipeline completed successfully.\n";
     return 0;
+}
+
+// ── main ─────────────────────────────────────────────────────────────────────
+int main(int argc, char *argv[]) {
+    std::cout << "==============================================================\n";
+    std::cout << "   ValveWise: DSA + OWA-EPANET 2.2+ Integrated Engine v1.0  \n";
+    std::cout << "==============================================================\n";
+
+    std::string inpPath = resolveInputPath(argc, argv);
+    std::cout << "Network: " << inpPath << "\n";
+
+    bool epanetOnly = hasFlag(argc, argv, "--epanet-only");
+
+    int rc = epanetOnly ? runEpanetOnlyDemo(inpPath)
+                        : runIntegratedDemo(inpPath);
+
+    std::cout << "==============================================================\n";
+    std::cout << "   ValveWise finished (exit " << rc << ")\n";
+    std::cout << "==============================================================\n";
+    return rc;
 }
