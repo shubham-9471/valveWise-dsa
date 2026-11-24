@@ -23,6 +23,8 @@ if [[ ! -x "$BIN" && ! -x "${BIN}.exe" ]]; then
 fi
 [[ -x "${BIN}.exe" ]] && BIN="${BIN}.exe"
 
+make -C "$REPO/backend" test-isolation
+
 # ── Helper: assert valid JSON with all v1 keys ─────────────────────────
 check_json() {
     local file="$1" label="$2"

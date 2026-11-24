@@ -1,21 +1,14 @@
 # PROGRESS.md — anti/backend
-
-## Done
-- M1: AGENTS.md + PROGRESS.md created
-- M2: Fix hashmap.c (<stdint.h>), optimizer.c (_POSIX_C_SOURCE already present),
-       main.c (strdup implicit decl + segfault on unknown pipe id),
-       inp_parser.c (strcasecmp feature macro)
-- M3: .gitattributes LF-endings committed, line endings normalized
-- M4: Root Makefile: `make all` = C backend only; `make hydraulic` = C++ part; `make test` added
-- M5: tests/run_tests.sh written
-- M6: README EPANET-compat claim removed
-
+- Done M1: AGENTS/PROGRESS; M2: portable C build/strdup/strcasecmp fixes.
+- Done M3: LF `.gitattributes`; M4: root Makefile targets.
+- Done M5: integration test runner; M6: removed EPANET-compat claim from README.
+- Done A2: isolation segment model, JSON contract field, fixed Tarjan parallel edges.
+- Done A2 tests: seeded 1000-case monotonicity plus ring/tree/source/stuck/parallel checks.
 ## Next
-- Commit all changes to anti/backend and push
-
+- Commit A2 to anti/backend and push.
 ## Decisions
-- strdup fix: use portable vw_strdup() helper in main.c guarded by _POSIX_C_SOURCE 200809L
-- segfault root cause: failed_link_indices malloc'd for fail_count but written past bounds when pipe not found — fixed with separate fli_count counter (already present, was correct; real crash was strdup returning garbage on MSVC without _strdup alias — added compat shim)
-- clock_gettime: _POSIX_C_SOURCE 199309L already in optimizer.c — no change needed
-- strcasecmp in inp_parser.c: add #define _POSIX_C_SOURCE 200809L before first #include
-- make all: C backend only (backend/valvewise); make hydraulic: C++ valvewise-sim
+- Segments cross unvalved and stuck links only; failed links are removed.
+- Operable boundary valves are the plan; source-containing segments are infeasible and cost total demand.
+- Stuck extra disruption is measured against an operable-valve counterfactual; total uses actual stuck result.
+- Tarjan tracks parent link index, not parent node, so parallel pipes remain back edges.
+- A1: `make all` builds C backend; `make hydraulic` builds C++ simulator.
