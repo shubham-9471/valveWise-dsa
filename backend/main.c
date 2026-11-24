@@ -48,6 +48,7 @@ static void print_usage(const char *prog) {
         "  --fail id1,id2,...    Comma-separated pipe IDs to burst\n"
         "  --stuck id1,id2,...   Comma-separated valve IDs to mark stuck-open\n"
         "  --mode full|rank|reach  Analysis mode (default: full)\n"
+        "  --scenarios all|failed  Optimization scenarios (default: failed with --fail, otherwise all)\n"
         "  --seed N              RNG seed for random placement (default: 42)\n"
         "  --verbose             Print progress to stderr\n",
         prog);
@@ -96,6 +97,7 @@ int main(int argc, char *argv[]) {
     const char *input_file  = NULL;
     const char *output_file = DEFAULT_OUTPUT;
     const char *mode        = DEFAULT_MODE;
+    const char *scenario_mode = NULL;
     const char *fail_csv    = NULL;
     const char *stuck_csv   = NULL;
     int         budget      = DEFAULT_BUDGET;
@@ -109,6 +111,7 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--fail")    == 0 && i+1 < argc) fail_csv    = argv[++i];
         else if (strcmp(argv[i], "--stuck")   == 0 && i+1 < argc) stuck_csv   = argv[++i];
         else if (strcmp(argv[i], "--mode")    == 0 && i+1 < argc) mode        = argv[++i];
+        else if (strcmp(argv[i], "--scenarios") == 0 && i+1 < argc) scenario_mode = argv[++i];
         else if (strcmp(argv[i], "--seed")    == 0 && i+1 < argc) seed        = (unsigned)atoi(argv[++i]);
         else if (strcmp(argv[i], "--verbose") == 0)                verbose     = true;
         else if (strcmp(argv[i], "--help")    == 0) { print_usage(argv[0]); return 0; }
@@ -194,11 +197,14 @@ int main(int argc, char *argv[]) {
 
     /* ── 8. Optimization (full mode only) ──────────────────────── */
     OptimizationReport *report = NULL;
+    ScenarioSet *scenarios = NULL;
     if (strcmp(mode, "full") == 0) {
         if (verbose) fprintf(stderr, "[6/6] Running optimization (budget=%d)...\n", budget);
-        report = run_full_optimization(g, budget,
-                                       failed_link_indices, fli_count,
-                                       sr, seed);
+        bool use_failed = fli_count > 0 &&
+            (!scenario_mode || strcmp(scenario_mode, "failed") == 0);
+        scenarios = use_failed ? scenario_set_failed(failed_link_indices, fli_count)
+                               : scenario_set_all(g);
+        report = run_full_optimization(g, budget, scenarios, sr, seed);
     }
 
     /* ── 9. Serialize and write JSON ───────────────────────────── */
@@ -236,6 +242,7 @@ int main(int argc, char *argv[]) {
 
     /* ── Cleanup ─────────────────────────────────────────────────── */
     free(failed_link_indices);
+    free_scenario_set(scenarios);
     free(ranked);
     free_reachability(reach);
     free_isolation(iso);

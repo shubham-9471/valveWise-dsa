@@ -82,12 +82,16 @@ test-isolation: graph.o queue.o isolation.o ../tests/isolation_model_test.c
 	$(CC) $(CFLAGS) -I. -o ../tests/isolation_model_test.exe ../tests/isolation_model_test.c graph.o queue.o isolation.o
 	../tests/isolation_model_test.exe
 
+test-optimizer: graph.o queue.o isolation.o optimizer.o heap.o ../tests/optimizer_model_test.c
+	$(CC) $(CFLAGS) -I. -o ../tests/optimizer_model_test.exe ../tests/optimizer_model_test.c graph.o queue.o isolation.o optimizer.o heap.o -lm
+	../tests/optimizer_model_test.exe
+
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
 ifeq ($(OS),Windows_NT)
-	-cmd /c del /q $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ..\tests\isolation_model_test.exe 2>nul
+	-cmd /c del /q $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ..\tests\isolation_model_test.exe ..\tests\optimizer_model_test.exe 2>nul
 else
-	rm -f $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ../tests/isolation_model_test.exe
+	rm -f $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ../tests/isolation_model_test.exe ../tests/optimizer_model_test.exe
 endif
 
-.PHONY: all run test test-multi test-isolation clean
+.PHONY: all run test test-multi test-isolation test-optimizer clean

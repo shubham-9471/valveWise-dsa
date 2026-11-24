@@ -24,6 +24,7 @@ fi
 [[ -x "${BIN}.exe" ]] && BIN="${BIN}.exe"
 
 make -C "$REPO/backend" test-isolation
+make -C "$REPO/backend" test-optimizer
 
 # ── Helper: assert valid JSON with all v1 keys ─────────────────────────
 check_json() {

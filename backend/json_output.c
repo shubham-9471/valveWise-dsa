@@ -272,9 +272,15 @@ static void sb_placement(SB *sb, const Graph *g, const PlacementResult *pr) {
     sb_printf(sb,
         "],\"total_disruption\":%.3f,\"baseline_disruption\":%.3f,"
         "\"improvement_pct\":%.2f,\"candidates_evaluated\":%ld,"
-        "\"runtime_ms\":%.3f}",
+        "\"runtime_ms\":%.3f,\"mean_disruption\":%.3f,"
+        "\"best_disruption\":%.3f,\"seed\":%u,\"trials\":%d,"
+        "\"skipped\":%s,\"skip_reason\":\"",
         pr->total_disruption, pr->baseline_disruption,
-        pr->improvement_pct, pr->candidates_evaluated, pr->runtime_ms);
+        pr->improvement_pct, pr->candidates_evaluated, pr->runtime_ms,
+        pr->mean_disruption, pr->best_disruption, pr->seed, pr->trials,
+        pr->skipped ? "true" : "false");
+    sb_append_escaped(sb, pr->skip_reason);
+    sb_append(sb, "\"}");
 }
 
 /* ── json_optimization_report ────────────────────────────────────── */
@@ -282,7 +288,8 @@ static void sb_placement(SB *sb, const Graph *g, const PlacementResult *pr) {
 char *json_optimization_report(const Graph *g, const OptimizationReport *report) {
     SB sb; sb_init(&sb);
     if (!report) { sb_append(&sb, "null"); return sb_take(&sb); }
-    sb_printf(&sb, "{\"budget\":%d,\"greedy\":", report->budget);
+    sb_printf(&sb, "{\"budget\":%d,\"seed\":%u,\"scenario_count\":%d,\"greedy\":",
+              report->budget, report->seed, report->scenario_count);
     sb_placement(&sb, g, report->greedy);
     sb_append(&sb, ",\"random\":");
     sb_placement(&sb, g, report->random_pl);
