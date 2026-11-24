@@ -61,7 +61,8 @@ export function normalizeReport(input) {
     rankedLinks: asArray(report.ranked_links).map((row, index) => ({ linkId: asString(row?.link_id ?? row?.id, `link-${index + 1}`), score: asNumber(row?.score), reason: asString(row?.reason) })),
     explanations,
     performance: { bfsMs: asNumber(performance.bfs_time_ms ?? performance.bfs_ms ?? reachability.bfs_time_ms),
-      optimizationRuntimeMs, candidates: candidatesEvaluated, memory: performance.memory ?? performance.memory_bytes ?? null }
+      optimizationRuntimeMs, candidates: candidatesEvaluated, memory: performance.memory ?? performance.memory_bytes ?? null },
+    error: report.error ? asObject(report.error) : null
   };
 }
 

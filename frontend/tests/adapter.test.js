@@ -20,3 +20,9 @@ test('normalizes additive impact, feasibility, explanation, and performance fiel
   assert.equal(model.isolation.isolationFeasible, false); assert.deepEqual(model.isolation.affectedSections, ['S1']); assert.equal(model.explanations.isolation_feasible, 'Source segment warning');
   assert.equal(model.performance.bfsMs, 1.25); assert.equal(model.performance.memory, 2048); assert.equal(model.rankedLinks[0].score, -2);
 });
+
+test('handles empty arrays, malformed shapes, and backend error JSON safely', () => {
+  const model = normalizeReport({ graph: { nodes: [], links: [] }, reachability: { disconnected_nodes: [] }, isolation: { failed_links: [], valves_to_close: [] }, ranked_links: [], error: { code: 'BACKEND_FAILED', message: 'engine failed' }, future: { ignored: true } });
+  assert.deepEqual(model.nodes, []); assert.deepEqual(model.links, []); assert.deepEqual(model.rankedLinks, []); assert.equal(model.error.code, 'BACKEND_FAILED');
+  assert.deepEqual(normalizeReport(null).nodes, []); assert.deepEqual(normalizeReport('partial').links, []);
+});
