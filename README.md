@@ -1,6 +1,15 @@
 # ValveWise — Water Distribution Network Failure & Resilience Optimizer
 
-A modular C-based simulation and optimization engine for Water Distribution Networks (WDNs). ValveWise parses EPANET-style `.inp` network topologies, models pipe burst failures and valve operability issues (including stuck-open valves), evaluates reachability and disrupted demand, detects topological vulnerabilities, and optimizes strategic valve placement under budget constraints.
+> **Scope notice:** ValveWise is a **connectivity simulator**, not a full hydraulic solver.
+> It reads EPANET-format `.inp` files for network topology only.
+> The `src/` C++ engine is a **hand-written approximate hydraulic stand-in** — it is *not*
+> OWA-EPANET and makes no claim of EPANET compatibility. For regulatory or engineering
+> hydraulic analysis, use a certified EPANET solver.
+
+A modular C-based simulation and optimization engine for Water Distribution Networks (WDNs). ValveWise
+parses EPANET-style `.inp` network topologies, models pipe burst failures and valve operability issues
+(including stuck-open valves), evaluates reachability and disrupted demand, detects topological
+vulnerabilities, and optimizes strategic valve placement under budget constraints.
 
 ---
 
@@ -25,7 +34,7 @@ ValveWise/
 │   └── EpanetEngine.hpp          # Modern C++ RAII wrapper class for OWA-EPANET
 ├── src/
 │   ├── EpanetEngine.cpp          # In-memory hydraulic simulation & valve control methods
-│   ├── epanet_core_runtime.c     # Standalone OWA-EPANET 2.2 C ABI compatible simulation runtime
+│   ├── epanet_core_runtime.c     # Approximate hydraulic stand-in (hand-written, not OWA-EPANET)
 │   └── main.cpp                  # C++ test runner & demonstration executable
 ├── docs/
 │   ├── Doxyfile                  # Doxygen configuration file

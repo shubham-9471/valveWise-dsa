@@ -42,6 +42,7 @@ typedef struct {
     int    *extra_disrupted;       /**< Node indices additionally disrupted by stuck-open valves */
     int     extra_disrupted_count;
     double  total_disrupted_demand;/**< Total demand disrupted (L/s) after isolation */
+    bool    isolation_feasible;     /**< Final segment contains no source node */
 } IsolationResult;
 
 /* ═══════════════════════════════════════════════════════════════════

@@ -104,167 +104,134 @@ void free_reachability(ReachabilityResult *r) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
- * compute_isolation — isolation boundary with stuck-valve handling
+ * compute_isolation — segment closure model
  * ═══════════════════════════════════════════════════════════════════ */
 
-IsolationResult *compute_isolation(Graph *g,
-                                   const int *failed_links,
-                                   int        failed_count) {
-    if (!g || !failed_links || failed_count <= 0) return NULL;
+static bool is_valved(const Link *l) {
+    return l->link_type == LINK_TYPE_VALVE || l->has_valve;
+}
 
-    IsolationResult *r = calloc(1, sizeof(IsolationResult));
-    if (!r) return NULL;
+static double network_demand(const Graph *g) {
+    double total = 0.0;
+    for (int i = 0; i < g->node_count; i++)
+        if (!g->nodes[i].is_source) total += g->nodes[i].base_demand;
+    return total;
+}
 
-    /* Copy failed link list */
-    r->failed_links = malloc((size_t)failed_count * sizeof(int));
-    if (!r->failed_links) { free(r); return NULL; }
-    memcpy(r->failed_links, failed_links, (size_t)failed_count * sizeof(int));
-    r->failed_count = failed_count;
-
-    /* Track which link indices have been added as valves to avoid duplicates */
-    bool *valve_added = calloc((size_t)g->link_count, sizeof(bool));
-    bool *node_visited = calloc((size_t)g->node_count, sizeof(bool));
-    if (!valve_added || !node_visited) {
-        free(valve_added); free(node_visited);
-        free(r->failed_links); free(r);
-        return NULL;
-    }
-
-    int vtc_cap = 16, vtc_cnt = 0;
-    int *valves_to_close = malloc((size_t)vtc_cap * sizeof(int));
-
-    int ed_cap = 16, ed_cnt = 0;
-    int *extra_disrupted = malloc((size_t)ed_cap * sizeof(int));
-
-    if (!valves_to_close || !extra_disrupted) {
-        free(valve_added); free(node_visited);
-        free(valves_to_close); free(extra_disrupted);
-        free(r->failed_links); free(r);
-        return NULL;
-    }
-
-    /* For each failed link, BFS from both endpoints to find bounding valves */
-    for (int fi = 0; fi < failed_count; fi++) {
-        int lnk_idx = failed_links[fi];
-        if (lnk_idx < 0 || lnk_idx >= g->link_count) continue;
-
-        int endpoints[2] = { g->links[lnk_idx].from_node, g->links[lnk_idx].to_node };
-
-        for (int ep = 0; ep < 2; ep++) {
-            /* BFS from this endpoint, stopping at valves */
-            Queue *q = queue_create(g->node_count + 1);
-            if (!q) continue;
-
-            memset(node_visited, 0, (size_t)g->node_count * sizeof(bool));
-            int start = endpoints[ep];
-            node_visited[start] = true;
-            queue_enqueue(q, start);
-
-            int cur;
-            while (queue_dequeue(q, &cur)) {
-                for (Edge *e = g->adj[cur]; e; e = e->next) {
-                    Link *lnk = &g->links[e->link_idx];
-
-                    /* Don't traverse back through failed link */
-                    if (e->link_idx == lnk_idx) continue;
-                    if (lnk->status == STATUS_BURST) continue;
-
-                    if (lnk->has_valve || lnk->link_type == LINK_TYPE_VALVE) {
-                        /* Found a bounding valve */
-                        if (!valve_added[e->link_idx]) {
-                            valve_added[e->link_idx] = true;
-                            if (lnk->status == STATUS_STUCK) {
-                                /* Stuck-open: cannot close; record extra disruption on the far node */
-                                if (ed_cnt >= ed_cap) {
-                                    int new_cap = ed_cap * 2;
-                                    int *tmp = realloc(extra_disrupted, (size_t)new_cap * sizeof(int));
-                                    if (tmp) {
-                                        extra_disrupted = tmp;
-                                        ed_cap = new_cap;
-                                    }
-                                }
-                                if (ed_cnt < ed_cap) {
-                                    extra_disrupted[ed_cnt++] = e->to;
-                                }
-                                /* Continue BFS past stuck valve */
-                                if (!node_visited[e->to]) {
-                                    node_visited[e->to] = true;
-                                    queue_enqueue(q, e->to);
-                                }
-                            } else {
-                                /* Operable valve — add to close list */
-                                if (vtc_cnt >= vtc_cap) {
-                                    int new_cap = vtc_cap * 2;
-                                    int *tmp = realloc(valves_to_close, (size_t)new_cap * sizeof(int));
-                                    if (tmp) {
-                                        valves_to_close = tmp;
-                                        vtc_cap = new_cap;
-                                    }
-                                }
-                                if (vtc_cnt < vtc_cap) {
-                                    valves_to_close[vtc_cnt++] = e->link_idx;
-                                }
-                            }
-                        }
-                        /* Do NOT continue BFS through a closeable valve */
-                        if (lnk->status != STATUS_STUCK) continue;
-                    }
-
-                    /* Traverse open pipes */
-                    if (!node_visited[e->to]) {
-                        node_visited[e->to] = true;
-                        queue_enqueue(q, e->to);
-                    }
-                }
+/* Build one or more segments. If allow_stuck is true, stuck valves are
+ * traversable; otherwise every valved link is a boundary. */
+static bool *build_segment(const Graph *g, const bool *failed,
+                           const int *failed_links, int failed_count,
+                           bool allow_stuck) {
+    bool *segment = calloc((size_t)g->node_count, sizeof(bool));
+    if (!segment) return NULL;
+    Queue *q = queue_create(g->node_count + 1);
+    if (!q) { free(segment); return NULL; }
+    for (int i = 0; i < failed_count; i++) {
+        int li = failed_links[i];
+        if (li < 0 || li >= g->link_count || failed[li]) {
+            if (li < 0 || li >= g->link_count) continue;
+        }
+        int ends[2] = {g->links[li].from_node, g->links[li].to_node};
+        for (int j = 0; j < 2; j++) {
+            if (!segment[ends[j]]) {
+                segment[ends[j]] = true;
+                queue_enqueue(q, ends[j]);
             }
-            queue_free(q);
         }
     }
-
-    free(valve_added);
-    free(node_visited);
-
-    r->valves_to_close        = valves_to_close;
-    r->valve_count            = vtc_cnt;
-    r->extra_disrupted        = extra_disrupted;
-    r->extra_disrupted_count  = ed_cnt;
-
-    /* Save previous link statuses before applying isolation */
-    LinkStatus *prev_valve_status = malloc((size_t)vtc_cnt * sizeof(LinkStatus));
-    LinkStatus *prev_failed_status = malloc((size_t)failed_count * sizeof(LinkStatus));
-    if (!prev_valve_status || !prev_failed_status) {
-        free(prev_valve_status);
-        free(prev_failed_status);
-        free(valves_to_close);
-        free(extra_disrupted);
-        free(r->failed_links);
-        free(r);
-        return NULL;
+    int u;
+    while (queue_dequeue(q, &u)) {
+        for (Edge *e = g->adj[u]; e; e = e->next) {
+            const Link *l = &g->links[e->link_idx];
+            if (failed[e->link_idx] || l->status == STATUS_BURST) continue;
+            if (is_valved(l) && !(allow_stuck && l->status == STATUS_STUCK)) continue;
+            if (!segment[e->to]) {
+                segment[e->to] = true;
+                queue_enqueue(q, e->to);
+            }
+        }
     }
+    queue_free(q);
+    return segment;
+}
 
-    for (int i = 0; i < vtc_cnt; i++) {
-        prev_valve_status[i] = g->links[valves_to_close[i]].status;
-        g->links[valves_to_close[i]].status = STATUS_CLOSED;
+static void apply_statuses(Graph *g, const bool *failed, const bool *closed) {
+    for (int i = 0; i < g->link_count; i++) {
+        if (failed[i]) g->links[i].status = STATUS_BURST;
+        else if (closed[i]) g->links[i].status = STATUS_CLOSED;
     }
-    for (int fi = 0; fi < failed_count; fi++) {
-        prev_failed_status[fi] = g->links[failed_links[fi]].status;
-        g->links[failed_links[fi]].status = STATUS_BURST;
-    }
+}
 
-    ReachabilityResult *reach = compute_reachability(g);
-    r->total_disrupted_demand = reach ? reach->disconnected_demand : 0.0;
-    free_reachability(reach);
-
-    /* Restore original statuses accurately */
-    for (int i = 0; i < vtc_cnt; i++)
-        g->links[valves_to_close[i]].status = prev_valve_status[i];
-    for (int fi = 0; fi < failed_count; fi++)
-        g->links[failed_links[fi]].status = prev_failed_status[fi];
-
-    free(prev_valve_status);
-    free(prev_failed_status);
-
+static ReachabilityResult *measure_plan(Graph *g, const bool *failed, const bool *closed) {
+    LinkStatus *saved = malloc((size_t)g->link_count * sizeof(LinkStatus));
+    if (!saved) return NULL;
+    for (int i = 0; i < g->link_count; i++) saved[i] = g->links[i].status;
+    apply_statuses(g, failed, closed);
+    ReachabilityResult *r = compute_reachability(g);
+    for (int i = 0; i < g->link_count; i++) g->links[i].status = saved[i];
+    free(saved);
     return r;
+}
+
+IsolationResult *compute_isolation(Graph *g, const int *failed_links, int failed_count) {
+    if (!g || !failed_links || failed_count <= 0) return NULL;
+    IsolationResult *r = calloc(1, sizeof(IsolationResult));
+    bool *failed = calloc((size_t)g->link_count, sizeof(bool));
+    bool *segment = NULL, *ideal_segment = NULL, *closed = NULL, *ideal_closed = NULL;
+    if (!r || !failed) { free(r); free(failed); return NULL; }
+    r->failed_links = malloc((size_t)failed_count * sizeof(int));
+    if (!r->failed_links) { free(failed); free(r); return NULL; }
+    memcpy(r->failed_links, failed_links, (size_t)failed_count * sizeof(int));
+    r->failed_count = failed_count;
+    for (int i = 0; i < failed_count; i++)
+        if (failed_links[i] >= 0 && failed_links[i] < g->link_count) failed[failed_links[i]] = true;
+
+    segment = build_segment(g, failed, failed_links, failed_count, true);
+    ideal_segment = build_segment(g, failed, failed_links, failed_count, false);
+    closed = calloc((size_t)g->link_count, sizeof(bool));
+    ideal_closed = calloc((size_t)g->link_count, sizeof(bool));
+    if (!segment || !ideal_segment || !closed || !ideal_closed) goto fail;
+
+    for (int i = 0; i < g->link_count; i++) {
+        Link *l = &g->links[i];
+        bool boundary = is_valved(l) && !failed[i] && l->status != STATUS_STUCK;
+        bool ideal_boundary = is_valved(l) && !failed[i];
+        bool touches = segment[l->from_node] != segment[l->to_node];
+        bool ideal_touches = ideal_segment[l->from_node] != ideal_segment[l->to_node];
+        if (boundary && (segment[l->from_node] || segment[l->to_node]) && touches) closed[i] = true;
+        if (ideal_boundary && (ideal_segment[l->from_node] || ideal_segment[l->to_node]) && ideal_touches)
+            ideal_closed[i] = true;
+    }
+    r->valves_to_close = calloc((size_t)g->link_count, sizeof(int));
+    if (!r->valves_to_close) goto fail;
+    for (int i = 0; i < g->link_count; i++) if (closed[i]) r->valves_to_close[r->valve_count++] = i;
+
+    r->isolation_feasible = true;
+    for (int i = 0; i < g->source_count; i++)
+        if (segment[g->source_indices[i]]) { r->isolation_feasible = false; break; }
+    r->extra_disrupted = calloc((size_t)g->node_count, sizeof(int));
+    if (!r->extra_disrupted) goto fail;
+    if (!r->isolation_feasible) {
+        r->total_disrupted_demand = network_demand(g);
+    } else {
+        ReachabilityResult *with_stuck = measure_plan(g, failed, closed);
+        ReachabilityResult *without_stuck = measure_plan(g, failed, ideal_closed);
+        if (!with_stuck || !without_stuck) { free_reachability(with_stuck); free_reachability(without_stuck); goto fail; }
+        r->total_disrupted_demand = with_stuck->disconnected_demand;
+        for (int i = 0; i < g->node_count; i++) {
+            if (!with_stuck->reachable[i] && without_stuck->reachable[i] && g->nodes[i].base_demand > 0.0)
+                r->extra_disrupted[r->extra_disrupted_count++] = i;
+        }
+        free_reachability(with_stuck);
+        free_reachability(without_stuck);
+    }
+    free(segment); free(ideal_segment); free(closed); free(ideal_closed); free(failed);
+    return r;
+fail:
+    free(segment); free(ideal_segment); free(closed); free(ideal_closed); free(failed);
+    free(r->failed_links); free(r->valves_to_close); free(r->extra_disrupted); free(r);
+    return NULL;
 }
 
 void free_isolation(IsolationResult *r) {
@@ -283,6 +250,7 @@ typedef struct {
     int *disc;    /* discovery time */
     int *low;     /* low-link value */
     int *parent;  /* parent in DFS tree (-1 for root) */
+    int *parent_edge; /* link used to reach each node */
     bool *ap;     /* articulation point flag */
     int   timer;
     /* Output collections */
@@ -301,10 +269,15 @@ static void dfs_tarjan(TarjanCtx *ctx, int u) {
         int v = e->to;
         int lnk_idx = e->link_idx;
 
+        /* Skip only the tree edge itself. A parallel edge to the parent is
+         * a real back edge and must prevent the tree edge being a bridge. */
+        if (lnk_idx == ctx->parent_edge[u]) continue;
+
         if (ctx->disc[v] == -1) {
             /* Tree edge */
             child_count++;
             ctx->parent[v] = u;
+            ctx->parent_edge[v] = lnk_idx;
             dfs_tarjan(ctx, v);
 
             /* Update low value */
@@ -332,7 +305,7 @@ static void dfs_tarjan(TarjanCtx *ctx, int u) {
             if (ctx->parent[u] != -1 && ctx->low[v] >= ctx->disc[u])
                 ctx->ap[u] = true;
 
-        } else if (v != ctx->parent[u]) {
+        } else {
             /* Back edge */
             if (ctx->disc[v] < ctx->low[u]) ctx->low[u] = ctx->disc[v];
         }
@@ -355,6 +328,7 @@ StructuralResult *compute_structural_analysis(const Graph *g) {
     ctx.disc      = malloc((size_t)n * sizeof(int));
     ctx.low       = malloc((size_t)n * sizeof(int));
     ctx.parent    = malloc((size_t)n * sizeof(int));
+    ctx.parent_edge = malloc((size_t)n * sizeof(int));
     ctx.ap        = calloc((size_t)n, sizeof(bool));
     ctx.timer     = 0;
     ctx.bridge_cap = 16; ctx.bridge_cnt = 0;
@@ -362,28 +336,18 @@ StructuralResult *compute_structural_analysis(const Graph *g) {
     ctx.ap_cap    = 16; ctx.ap_cnt = 0;
     ctx.ap_arr    = malloc(16 * sizeof(int));
 
-    if (!ctx.disc || !ctx.low || !ctx.parent || !ctx.ap || !ctx.bridges || !ctx.ap_arr) {
-        free(ctx.disc); free(ctx.low); free(ctx.parent);
+    if (!ctx.disc || !ctx.low || !ctx.parent || !ctx.parent_edge || !ctx.ap || !ctx.bridges || !ctx.ap_arr) {
+        free(ctx.disc); free(ctx.low); free(ctx.parent); free(ctx.parent_edge);
         free(ctx.ap); free(ctx.bridges); free(ctx.ap_arr);
         free(sr->component_id); free(sr);
         return NULL;
     }
 
-    for (int i = 0; i < n; i++) { ctx.disc[i] = -1; ctx.low[i] = 0; ctx.parent[i] = -1; }
+    for (int i = 0; i < n; i++) { ctx.disc[i] = -1; ctx.low[i] = 0; ctx.parent[i] = -1; ctx.parent_edge[i] = -1; }
 
-    int comp = 0;
     for (int i = 0; i < n; i++) {
         if (ctx.disc[i] == -1) {
             dfs_tarjan(&ctx, i);
-            /* Label this component */
-            /* (simple labelling: re-walk the disc array) */
-            for (int j = 0; j < n; j++) {
-                if (sr->component_id[j] == -1 && ctx.disc[j] != -1) {
-                    /* Every node reached in this DFS iteration belongs to component comp */
-                    /* We use a second pass: mark all nodes discovered after the previous comp */
-                }
-            }
-            comp++;
         }
     }
 
@@ -433,7 +397,7 @@ StructuralResult *compute_structural_analysis(const Graph *g) {
     sr->articulation_points = ctx.ap_arr;
     sr->ap_count            = ctx.ap_cnt;
 
-    free(ctx.disc); free(ctx.low); free(ctx.parent); free(ctx.ap);
+    free(ctx.disc); free(ctx.low); free(ctx.parent); free(ctx.parent_edge); free(ctx.ap);
     return sr;
 }
 

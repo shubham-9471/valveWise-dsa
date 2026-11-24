@@ -211,7 +211,8 @@ char *json_isolation(const Graph *g, const IsolationResult *r) {
         sb_append_escaped(&sb, g->nodes[ni].id);
         sb_append(&sb, "\"");
     }
-    sb_printf(&sb, "],\"total_disrupted_demand\":%.3f}", r->total_disrupted_demand);
+    sb_printf(&sb, "],\"total_disrupted_demand\":%.3f,\"isolation_feasible\":%s}",
+              r->total_disrupted_demand, r->isolation_feasible ? "true" : "false");
     return sb_take(&sb);
 }
 

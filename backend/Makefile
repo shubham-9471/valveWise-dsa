@@ -78,12 +78,16 @@ test-multi: $(TARGET)
 	./$(TARGET) --input ../data/sample.inp --fail P3,P7 --stuck V1 \
 	            --budget 5 --output test_multi.json --verbose
 
+test-isolation: graph.o queue.o isolation.o ../tests/isolation_model_test.c
+	$(CC) $(CFLAGS) -I. -o ../tests/isolation_model_test.exe ../tests/isolation_model_test.c graph.o queue.o isolation.o
+	../tests/isolation_model_test.exe
+
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
 ifeq ($(OS),Windows_NT)
-	-cmd /c del /q $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json 2>nul
+	-cmd /c del /q $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ..\tests\isolation_model_test.exe 2>nul
 else
-	rm -f $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json
+	rm -f $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ../tests/isolation_model_test.exe
 endif
 
-.PHONY: all run test test-multi clean
+.PHONY: all run test test-multi test-isolation clean
