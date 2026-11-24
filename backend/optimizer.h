@@ -48,7 +48,11 @@ typedef struct {
     int     trials;               /**< Number of random trials */
     bool    skipped;               /**< Algorithm was capped/skipped */
     char    skip_reason[160];
+    double *placement_before;
+    double *placement_after;
 } PlacementResult;
+
+typedef struct ScenarioSet ScenarioSet;
 
 /* Full optimization comparison */
 typedef struct {
@@ -59,13 +63,16 @@ typedef struct {
     int              budget;
     unsigned int     seed;
     int              scenario_count;
+    double           optimization_ms;
+    long             memory_kb;
+    const ScenarioSet *scenarios;
 } OptimizationReport;
 
-typedef struct {
+struct ScenarioSet {
     int **failures;               /**< failures[i] has failure_counts[i] link indices */
     int  *failure_counts;
     int   count;
-} ScenarioSet;
+};
 
 ScenarioSet *scenario_set_all(const Graph *g);
 ScenarioSet *scenario_set_failed(const int *failed_links, int failed_count);

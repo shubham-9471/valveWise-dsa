@@ -171,8 +171,8 @@ char *json_graph(const Graph *g) {
 char *json_reachability(const Graph *g, const ReachabilityResult *r) {
     SB sb; sb_init(&sb);
     if (!r) { sb_append(&sb, "null"); return sb_take(&sb); }
-    sb_printf(&sb, "{\"disconnected_count\":%d,\"disconnected_demand\":%.3f,\"disconnected_nodes\":[",
-              r->disconnected_count, r->disconnected_demand);
+    sb_printf(&sb, "{\"disconnected_count\":%d,\"disconnected_demand\":%.3f,\"bfs_ms\":%.3f,\"disconnected_nodes\":[",
+              r->disconnected_count, r->disconnected_demand, r->bfs_ms);
     for (int i = 0; i < r->disconnected_count; i++) {
         if (i) sb_append(&sb, ",");
         int ni = r->disconnected_nodes[i];
@@ -280,7 +280,15 @@ static void sb_placement(SB *sb, const Graph *g, const PlacementResult *pr) {
         pr->mean_disruption, pr->best_disruption, pr->seed, pr->trials,
         pr->skipped ? "true" : "false");
     sb_append_escaped(sb, pr->skip_reason);
-    sb_append(sb, "\"}");
+    sb_append(sb, "\",\"placement_explanations\":[");
+    for (int i = 0; i < pr->placed_count; i++) {
+        if (i) sb_append(sb, ",");
+        sb_printf(sb, "{\"valve\":\""); sb_append_escaped(sb, g->links[pr->placed_valves[i]].id);
+        sb_printf(sb, "\",\"before\":%.3f,\"after\":%.3f,\"why\":\"Disruption changed from %.3f to %.3f after placing this valve\"}",
+                  pr->placement_before[i], pr->placement_after[i],
+                  pr->placement_before[i], pr->placement_after[i]);
+    }
+    sb_append(sb, "]}");
 }
 
 /* ── json_optimization_report ────────────────────────────────────── */
@@ -299,6 +307,58 @@ char *json_optimization_report(const Graph *g, const OptimizationReport *report)
     sb_placement(&sb, g, report->exhaustive);
     sb_append(&sb, "}");
     return sb_take(&sb);
+}
+
+static bool iso_link_contains(const int *links, int count, int idx) {
+    for (int i = 0; i < count; i++) if (links[i] == idx) return true;
+    return false;
+}
+static void sb_id_array(SB *sb, const Graph *g, const int *ids, int count, bool nodes) {
+    sb_append(sb, "[");
+    for (int i = 0; i < count; i++) { if (i) sb_append(sb, ","); sb_append(sb, "\""); sb_append_escaped(sb, nodes ? g->nodes[ids[i]].id : g->links[ids[i]].id); sb_append(sb, "\""); }
+    sb_append(sb, "]");
+}
+static void sb_scenario_explanation(SB *sb, const Graph *g, const IsolationResult *iso, int scenario_no) {
+    bool *reached = calloc((size_t)g->node_count, sizeof(bool)); int *queue = malloc((size_t)(g->node_count > 0 ? g->node_count : 1) * sizeof(int));
+    int *route_links = malloc((size_t)(g->link_count > 0 ? g->link_count : 1) * sizeof(int));
+    if (!reached || !queue || !route_links) { free(reached); free(queue); free(route_links); sb_append(sb, "null"); return; }
+    for (int s = 0; s < g->source_count; s++) { int head = 0, tail = 0, source = g->source_indices[s]; reached[source] = true; queue[tail++] = source;
+        while (head < tail) { int u = queue[head++]; for (Edge *e = g->adj[u]; e; e = e->next) {
+            if (g->links[e->link_idx].status == STATUS_BURST || g->links[e->link_idx].status == STATUS_CLOSED || iso_link_contains(iso->failed_links, iso->failed_count, e->link_idx) || iso_link_contains(iso->valves_to_close, iso->valve_count, e->link_idx)) continue;
+            if (!reached[e->to]) { reached[e->to] = true; queue[tail++] = e->to; }
+        }}
+    }
+    sb_printf(sb, "{\"scenario\":%d,\"failed_links\":", scenario_no); sb_id_array(sb, g, iso->failed_links, iso->failed_count, false);
+    sb_append(sb, ",\"valves_to_close\":[");
+    for (int i = 0; i < iso->valve_count; i++) { if (i) sb_append(sb, ","); sb_printf(sb, "{\"link\":\""); sb_append_escaped(sb, g->links[iso->valves_to_close[i]].id); sb_printf(sb, "\",\"reason\":\"bounds segment %d with %d node(s)\"}", scenario_no, iso->segment_node_count); }
+    sb_append(sb, "],\"stuck_boundary\":[");
+    for (int i = 0; i < iso->stuck_boundary_count; i++) { if (i) sb_append(sb, ","); sb_printf(sb, "{\"link\":\""); sb_append_escaped(sb, g->links[iso->stuck_boundary[i]].id); sb_printf(sb, "\",\"reason\":\"stuck, boundary expanded to %d node(s)\"}", iso->segment_node_count); }
+    sb_append(sb, "],\"disconnected_junctions\":["); bool first = true;
+    for (int i = 0; i < g->node_count; i++) if (!g->nodes[i].is_source && !reached[i]) { if (!first) sb_append(sb, ","); first = false; sb_append(sb, "\""); sb_append_escaped(sb, g->nodes[i].id); sb_append(sb, "\""); }
+    sb_append(sb, "],\"alternative_routes\":[");
+    for (int s = 0; s < g->source_count; s++) { int head = 0, tail = 0, route_count = 0, source = g->source_indices[s]; bool *seen = calloc((size_t)g->node_count, sizeof(bool)); bool *used = calloc((size_t)g->link_count, sizeof(bool));
+        if (!seen || !used) { free(seen); free(used); continue; } seen[source] = true; queue[tail++] = source;
+        while (head < tail) { int u = queue[head++]; for (Edge *e = g->adj[u]; e; e = e->next) {
+            if (g->links[e->link_idx].status == STATUS_BURST || g->links[e->link_idx].status == STATUS_CLOSED || iso_link_contains(iso->failed_links, iso->failed_count, e->link_idx) || iso_link_contains(iso->valves_to_close, iso->valve_count, e->link_idx)) continue;
+            if (!seen[e->to]) { seen[e->to] = true; queue[tail++] = e->to; if (!used[e->link_idx]) { used[e->link_idx] = true; route_links[route_count++] = e->link_idx; } }
+        }}
+        if (s) sb_append(sb, ",");
+        sb_printf(sb, "{\"source\":\""); sb_append_escaped(sb, g->nodes[source].id); sb_append(sb, "\",\"via_links\":"); sb_id_array(sb, g, route_links, route_count, false); sb_append(sb, "}");
+        free(seen); free(used);
+    }
+    sb_printf(sb, "],\"isolation_feasible\":%s}", iso->isolation_feasible ? "true" : "false"); free(reached); free(queue); free(route_links);
+}
+static char *json_explanations(const Graph *g, const IsolationResult *iso, const OptimizationReport *report) {
+    SB sb; sb_init(&sb); sb_append(&sb, "{\"scenarios\":["); int emitted = 0;
+    if (report && report->scenarios) for (int i = 0; i < report->scenarios->count; i++) {
+        IsolationResult *current = compute_isolation((Graph *)g, report->scenarios->failures[i], report->scenarios->failure_counts[i]);
+        if (!current) continue;
+        if (emitted++) sb_append(&sb, ",");
+        sb_scenario_explanation(&sb, g, current, i + 1);
+        free_isolation(current);
+    }
+    else if (iso) sb_scenario_explanation(&sb, g, iso, 1);
+    sb_append(&sb, "]}"); return sb_take(&sb);
 }
 
 /* ── json_full_report ────────────────────────────────────────────── */
@@ -347,6 +407,15 @@ char *json_full_report(const Graph            *g,
     char *jor = json_optimization_report(g, report);
     sb_append(&sb, jor ? jor : "null");
     free(jor);
+
+    sb_append(&sb, ",\"explanations\":");
+    char *je = json_explanations(g, iso, report);
+    sb_append(&sb, je ? je : "null");
+    free(je);
+
+    sb_printf(&sb, ",\"performance\":{\"bfs_ms\":%.3f,\"optimization_ms\":%.3f,\"memory_kb\":%ld}",
+              reach ? reach->bfs_ms : 0.0, report ? report->optimization_ms : 0.0,
+              report ? report->memory_kb : -1L);
 
     sb_append(&sb, "}");
     return sb_take(&sb);

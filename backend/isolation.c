@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 /* ═══════════════════════════════════════════════════════════════════
  * simulate_failure / reset_failures
@@ -32,6 +33,7 @@ void reset_failures(Graph *g) {
 
 ReachabilityResult *compute_reachability(const Graph *g) {
     if (!g) return NULL;
+    clock_t bfs_start = clock();
 
     ReachabilityResult *r = calloc(1, sizeof(ReachabilityResult));
     if (!r) return NULL;
@@ -93,6 +95,7 @@ ReachabilityResult *compute_reachability(const Graph *g) {
     r->disconnected_count   = disc_cnt;
     r->disconnected_demand  = total_demand;
     r->disconnected_nodes   = disc;
+    r->bfs_ms = 1000.0 * (double)(clock() - bfs_start) / (double)CLOCKS_PER_SEC;
     return r;
 }
 
@@ -211,7 +214,15 @@ IsolationResult *compute_isolation(Graph *g, const int *failed_links, int failed
     for (int i = 0; i < g->source_count; i++)
         if (segment[g->source_indices[i]]) { r->isolation_feasible = false; break; }
     r->extra_disrupted = calloc((size_t)g->node_count, sizeof(int));
-    if (!r->extra_disrupted) goto fail;
+    r->stuck_boundary = calloc((size_t)(g->link_count > 0 ? g->link_count : 1), sizeof(int));
+    if (!r->extra_disrupted || !r->stuck_boundary) goto fail;
+    for (int i = 0; i < g->node_count; i++) if (segment[i]) r->segment_node_count++;
+    for (int i = 0; i < g->link_count; i++) {
+        Link *l = &g->links[i];
+        if (!failed[i] && is_valved(l) && l->status == STATUS_STUCK &&
+            (segment[l->from_node] || segment[l->to_node]))
+            r->stuck_boundary[r->stuck_boundary_count++] = i;
+    }
     if (!r->isolation_feasible) {
         r->total_disrupted_demand = network_demand(g);
     } else {
@@ -230,7 +241,7 @@ IsolationResult *compute_isolation(Graph *g, const int *failed_links, int failed
     return r;
 fail:
     free(segment); free(ideal_segment); free(closed); free(ideal_closed); free(failed);
-    free(r->failed_links); free(r->valves_to_close); free(r->extra_disrupted); free(r);
+    free(r->failed_links); free(r->valves_to_close); free(r->extra_disrupted); free(r->stuck_boundary); free(r);
     return NULL;
 }
 
@@ -239,6 +250,7 @@ void free_isolation(IsolationResult *r) {
     free(r->failed_links);
     free(r->valves_to_close);
     free(r->extra_disrupted);
+    free(r->stuck_boundary);
     free(r);
 }
 

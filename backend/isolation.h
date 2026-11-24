@@ -28,6 +28,7 @@ typedef struct {
     int     disconnected_count;   /**< Number of nodes that cannot receive water */
     double  disconnected_demand;  /**< Sum of base_demand for all unreachable nodes (L/s) */
     int    *disconnected_nodes;   /**< Array of unreachable node indices */
+    double  bfs_ms;               /**< Reachability BFS duration */
 } ReachabilityResult;
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -43,6 +44,9 @@ typedef struct {
     int     extra_disrupted_count;
     double  total_disrupted_demand;/**< Total demand disrupted (L/s) after isolation */
     bool    isolation_feasible;     /**< Final segment contains no source node */
+    int    segment_node_count;
+    int   *stuck_boundary;
+    int    stuck_boundary_count;
 } IsolationResult;
 
 /* ═══════════════════════════════════════════════════════════════════

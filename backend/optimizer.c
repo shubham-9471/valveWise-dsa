@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <time.h>
 #include <math.h>
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 
 static double now_ms(void) {
     struct timespec ts;
@@ -168,7 +171,11 @@ static PlacementResult *result_new(const char *name, const OptCtx *ctx, int budg
     int cap = budget < ctx->candidate_count ? budget : ctx->candidate_count;
     if (cap < 0) cap = 0;
     r->placed_valves = calloc((size_t)(cap > 0 ? cap : 1), sizeof(int));
-    if (!r->placed_valves) { free(r); return NULL; }
+    r->placement_before = calloc((size_t)(cap > 0 ? cap : 1), sizeof(double));
+    r->placement_after = calloc((size_t)(cap > 0 ? cap : 1), sizeof(double));
+    if (!r->placed_valves || !r->placement_before || !r->placement_after) {
+        free(r->placed_valves); free(r->placement_before); free(r->placement_after); free(r); return NULL;
+    }
     return r;
 }
 
@@ -197,7 +204,10 @@ static PlacementResult *optimize_greedy(const OptCtx *ctx, int budget) {
             if (gain > best_gain + 1e-12) { best_gain = gain; best = li; best_value = d; }
         }
         if (best < 0 || best_gain <= 1e-9) break;
-        chosen[best] = true; r->placed_valves[r->placed_count++] = best; current = best_value;
+        chosen[best] = true;
+        r->placement_before[r->placed_count] = current;
+        r->placement_after[r->placed_count] = best_value;
+        r->placed_valves[r->placed_count++] = best; current = best_value;
     }
     free(trial); free(chosen); finish_result(r, current, t0); return r;
 }
@@ -225,6 +235,10 @@ static PlacementResult *optimize_random(const OptCtx *ctx, int budget, unsigned 
     if (trials == 0) best_d = ctx->baseline;
     memcpy(r->placed_valves, best, (size_t)k * sizeof(int)); r->placed_count = k;
     r->mean_disruption = sum / trials; finish_result(r, best_d, t0);
+    for (int i = 0; i < k; i++) {
+        r->placement_before[i] = evaluate(ctx, r->placed_valves, i);
+        r->placement_after[i] = evaluate(ctx, r->placed_valves, i + 1);
+    }
     free(order); free(best); return r;
 }
 
@@ -251,6 +265,10 @@ static PlacementResult *optimize_topology(const OptCtx *ctx, int budget) {
     int k = budget < ctx->candidate_count ? budget : ctx->candidate_count;
     memcpy(r->placed_valves, order, (size_t)k * sizeof(int)); r->placed_count = k;
     double d = evaluate(ctx, r->placed_valves, k); r->candidates_evaluated = 1;
+    for (int i = 0; i < k; i++) {
+        r->placement_before[i] = evaluate(ctx, r->placed_valves, i);
+        r->placement_after[i] = evaluate(ctx, r->placed_valves, i + 1);
+    }
     finish_result(r, d, t0); free(bridges); free(order); return r;
 }
 
@@ -293,25 +311,36 @@ static PlacementResult *optimize_exhaustive(const OptCtx *ctx, int budget) {
     EnumCtx e = {ctx, current, best, k, INFINITY, 0}; enumerate(&e, 0, 0);
     memcpy(r->placed_valves, best, (size_t)k * sizeof(int)); r->placed_count = k;
     r->candidates_evaluated = e.count; finish_result(r, e.value, t0);
+    for (int i = 0; i < k; i++) {
+        r->placement_before[i] = evaluate(ctx, r->placed_valves, i);
+        r->placement_after[i] = evaluate(ctx, r->placed_valves, i + 1);
+    }
     free(current); free(best); return r;
 }
 
 OptimizationReport *run_full_optimization(Graph *g, int budget, const ScenarioSet *scenarios,
                                            const StructuralResult *sr, unsigned int seed) {
     if (!g || !scenarios) return NULL;
+    double t0 = now_ms();
     OptimizationReport *report = calloc(1, sizeof(*report)); if (!report) return NULL;
     int candidate_count = 0; int *candidates = candidate_links(g, &candidate_count);
     OptCtx ctx = {g, scenarios, candidates, candidate_count, 0.0, sr};
     ctx.baseline = evaluate(&ctx, NULL, 0);
-    report->budget = budget; report->seed = seed; report->scenario_count = scenarios->count;
+    report->budget = budget; report->seed = seed; report->scenario_count = scenarios->count; report->scenarios = scenarios;
     report->greedy = optimize_greedy(&ctx, budget);
     report->random_pl = optimize_random(&ctx, budget, seed);
     report->topology = optimize_topology(&ctx, budget);
     report->exhaustive = optimize_exhaustive(&ctx, budget);
+    report->optimization_ms = now_ms() - t0;
+#ifdef _WIN32
+    report->memory_kb = -1;
+#else
+    struct rusage usage; report->memory_kb = getrusage(RUSAGE_SELF, &usage) == 0 ? usage.ru_maxrss : -1;
+#endif
     free(candidates); return report;
 }
 
-void free_placement_result(PlacementResult *r) { if (r) { free(r->placed_valves); free(r); } }
+void free_placement_result(PlacementResult *r) { if (r) { free(r->placed_valves); free(r->placement_before); free(r->placement_after); free(r); } }
 void free_optimization_report(OptimizationReport *r) {
     if (!r) return;
     free_placement_result(r->greedy); free_placement_result(r->random_pl);
