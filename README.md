@@ -22,7 +22,7 @@ ValveWise/
 │   ├── hashmap.h / hashmap.c     # Open-addressing hash table (djb2) mapping IDs to indices
 │   ├── queue.h / queue.c         # Circular-buffer integer queue for BFS traversals
 │   ├── heap.h / heap.c           # Binary Min/Max-Heap for component criticality ranking
-│   ├── isolation.h / isolation.c # BFS reachability, Tarjan bridge detection, isolation boundaries
+│   ├── isolation.h / isolation.c # BFS reachability, iterative Tarjan, isolation boundaries
 │   ├── optimizer.h / optimizer.c # Greedy, Random, Topology, and Exhaustive valve placement
 │   ├── inp_parser.h / inp_parser.c # EPANET-style .inp network file parser
 │   ├── json_output.h / json_output.c # Dynamic string buffer JSON serializer
@@ -74,7 +74,7 @@ ValveWise/
    - Accurately models **stuck-open valves**: when a valve fails to close, the algorithm expands the isolation boundary further upstream/downstream and records additional disrupted customer demand.
    - Preserves underlying pipe and valve statuses without altering permanent graph state.
 
-3. **Tarjan's Bridge & Articulation Point Detection (DFS)**:
+3. **Tarjan's Bridge & Articulation Point Detection (iterative DFS)**:
    - Uses low-link values to detect structural single points of failure (bridges whose failure separates the network).
 
 4. **Budget-Constrained Valve Placement Optimization**:
@@ -82,6 +82,21 @@ ValveWise/
    - **Random Baseline**: Selects $B$ random candidates across uniform iterations for benchmarking.
    - **Topology-Based Baseline**: Prioritizes bridges first, then links with maximal endpoint degree products.
    - **Exhaustive Search**: Enumerates all $\binom{E}{B}$ combinations on small networks (skips automatically when candidate space $> 500,000$).
+
+### Complexity
+
+| Operation | Complexity | Honest limit |
+|---|---|---|
+| Parser | $O(V+E)$ expected | IDs are bounded to 63 characters; graph storage is dynamic |
+| BFS reachability | $O(V+E)$ | Repeated once per evaluated failure/configuration |
+| Iterative Tarjan | $O(V+E)$ time, $O(V+E)$ auxiliary worst case | Explicit heap stack avoids C recursion overflow |
+| Greedy placement | $O(B\,C\,S\,(V+E))$ | $C$ candidates, $S$ scenarios |
+| Random placement | $O(100\,S\,(V+E))$ per run | 100 internal trials, five seeds in benchmarks |
+| Exhaustive placement | $O(\binom{C}{B}\,S\,(V+E))$ | Hard cap of 500,000 combinations |
+
+ValveWise is a connectivity simulator with simulated link valves; it is not a
+hydraulic solver and does not claim EPANET hydraulic compatibility. Demand,
+pressure, flow, controls, and quality results are not engineering predictions.
 
 ---
 
@@ -104,7 +119,7 @@ ValveWise/
 ### Quick Build & Run (Root Makefile)
 Run from the root `ValveWise/` directory:
 ```bash
-# Build C++ simulation engine and C backend
+# Build C++ demonstration and C backend
 make all
 
 # Run test on the Image 3 topology network (R1 -> PUMP -> J1 with T1, J2, J3)
@@ -160,6 +175,18 @@ Running backend simulation scenarios:
    ```bash
    ./valvewise --input ../data/net_image3.inp --fail P1 --verbose
    ```
+5. **Load simulated valves kept outside the EPANET file**:
+   ```bash
+   ./valvewise --input ../data/net_image3.inp --valves ../data/net_image3.valves --mode full
+   ```
+
+### Backend tests
+
+From the repository root, run `bash tests/run_tests.sh` (or invoke the
+individual `mingw32-make -C backend test-isolation` and `test-optimizer`
+targets on Windows). The suite also checks the hand networks, parser fuzz
+cases, and JSON contracts. `bench/run.sh` regenerates the measured benchmark
+CSV; it is separate from the correctness suite.
 
 ### 📚 Generating Doxygen Documentation
 ```bash
@@ -179,3 +206,5 @@ The output file (e.g. `output.json`) contains:
 - `structural`: Connected components count, list of bridge link IDs, and articulation point node IDs.
 - `ranked_links`: Links ranked by disruption severity along with human-readable explanations.
 - `optimization`: Comparative benchmark containing `greedy`, `random`, `topology`, and `exhaustive` performance (runtime in ms, candidates evaluated, and percentage improvement over baseline).
+- `explanations`: Generated per-scenario isolation reasons, disconnected junctions, alternative source routes, feasibility, and per-placement disruption explanations.
+- `performance`: BFS and optimization timings plus peak memory where available (`-1` means unavailable).

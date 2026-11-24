@@ -91,6 +91,7 @@ static int load_valves_file(const char *path, Graph *g, NetworkIndex *ni) {
     FILE *fp = fopen(path, "r"); if (!fp) return -1;
     char line[512];
     while (fgets(line, sizeof(line), fp)) {
+        if (!strchr(line, '\n') && !feof(fp)) { fclose(fp); return -1; }
         char *comment = strchr(line, ';'); if (!comment) comment = strchr(line, '#'); if (comment) *comment = '\0';
         char *text = trim_arg(line); if (!*text) continue;
         char id[64], status[32] = {0}; int n = sscanf(text, "%63s %31s", id, status), idx;

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 NetworkIndex *network_index_create(void) {
     NetworkIndex *ni = calloc(1, sizeof(*ni));
@@ -27,7 +28,12 @@ static int equal_ci(const char *a, const char *b) {
 static int read_line(FILE *fp, char **out) {
     size_t len = 0, cap = 256; int c; char *line = malloc(cap); if (!line) return -1;
     while ((c = fgetc(fp)) != EOF) {
-        if (len + 1 >= cap) { cap *= 2; char *tmp = realloc(line, cap); if (!tmp) { free(line); return -1; } line = tmp; }
+        if (len + 1 >= cap) {
+            if (cap > SIZE_MAX / 2) { free(line); return -1; }
+            cap *= 2; char *tmp = realloc(line, cap);
+            if (!tmp) { free(line); return -1; }
+            line = tmp;
+        }
         line[len++] = (char)c; if (c == '\n') break;
     }
     if (len == 0 && c == EOF) { free(line); return 0; }

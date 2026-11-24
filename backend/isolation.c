@@ -273,55 +273,57 @@ typedef struct {
     const Graph *g;
 } TarjanCtx;
 
-static void dfs_tarjan(TarjanCtx *ctx, int u) {
-    ctx->disc[u] = ctx->low[u] = ctx->timer++;
-    int child_count = 0;
+typedef struct { int node; Edge *next; int child_count; } TarjanFrame;
 
-    for (Edge *e = ctx->g->adj[u]; e; e = e->next) {
-        int v = e->to;
-        int lnk_idx = e->link_idx;
-
-        /* Skip only the tree edge itself. A parallel edge to the parent is
-         * a real back edge and must prevent the tree edge being a bridge. */
-        if (lnk_idx == ctx->parent_edge[u]) continue;
-
-        if (ctx->disc[v] == -1) {
-            /* Tree edge */
-            child_count++;
-            ctx->parent[v] = u;
-            ctx->parent_edge[v] = lnk_idx;
-            dfs_tarjan(ctx, v);
-
-            /* Update low value */
-            if (ctx->low[v] < ctx->low[u]) ctx->low[u] = ctx->low[v];
-
-            /* Bridge check */
-            if (ctx->low[v] > ctx->disc[u]) {
-                /* lnk_idx is a bridge */
-                if (ctx->bridge_cnt >= ctx->bridge_cap) {
-                    int new_cap = ctx->bridge_cap * 2;
-                    int *tmp = realloc(ctx->bridges, (size_t)new_cap * sizeof(int));
-                    if (tmp) {
-                        ctx->bridges = tmp;
-                        ctx->bridge_cap = new_cap;
-                    }
-                }
-                if (ctx->bridge_cnt < ctx->bridge_cap) {
-                    ctx->bridges[ctx->bridge_cnt++] = lnk_idx;
-                }
-            }
-
-            /* Articulation point check */
-            if (ctx->parent[u] == -1 && child_count > 1)
-                ctx->ap[u] = true;
-            if (ctx->parent[u] != -1 && ctx->low[v] >= ctx->disc[u])
-                ctx->ap[u] = true;
-
-        } else {
-            /* Back edge */
-            if (ctx->disc[v] < ctx->low[u]) ctx->low[u] = ctx->disc[v];
-        }
+static bool append_int(int **values, int *count, int *capacity, int value) {
+    if (*count >= *capacity) {
+        if (*capacity > 1073741823) return false;
+        int next = *capacity * 2;
+        int *tmp = realloc(*values, (size_t)next * sizeof(int));
+        if (!tmp) return false;
+        *values = tmp; *capacity = next;
     }
+    (*values)[(*count)++] = value;
+    return true;
+}
+
+/* Iterative Tarjan DFS. The explicit frame stack preserves the recursive
+ * post-order step while avoiding call-stack overflow on 10k-node networks. */
+static bool tarjan_component(TarjanCtx *ctx, int root) {
+    TarjanFrame *stack = malloc((size_t)(ctx->g->node_count > 0 ? ctx->g->node_count : 1) * sizeof(*stack));
+    if (!stack) return false;
+    int top = 0;
+    ctx->disc[root] = ctx->low[root] = ctx->timer++;
+    ctx->parent[root] = -1; ctx->parent_edge[root] = -1;
+    stack[top++] = (TarjanFrame){root, ctx->g->adj[root], 0};
+    while (top > 0) {
+        TarjanFrame *frame = &stack[top - 1]; int u = frame->node;
+        Edge *e = frame->next;
+        if (e) {
+            frame->next = e->next;
+            int v = e->to, link = e->link_idx;
+            if (link == ctx->parent_edge[u]) continue;
+            if (ctx->disc[v] == -1) {
+                frame->child_count++;
+                ctx->parent[v] = u; ctx->parent_edge[v] = link;
+                ctx->disc[v] = ctx->low[v] = ctx->timer++;
+                stack[top++] = (TarjanFrame){v, ctx->g->adj[v], 0};
+            } else if (ctx->disc[v] < ctx->low[u]) {
+                ctx->low[u] = ctx->disc[v];
+            }
+            continue;
+        }
+        top--;
+        if (ctx->parent[u] == -1) {
+            if (frame->child_count > 1) ctx->ap[u] = true;
+            continue;
+        }
+        int p = ctx->parent[u];
+        if (ctx->low[u] < ctx->low[p]) ctx->low[p] = ctx->low[u];
+        if (ctx->low[u] > ctx->disc[p] && !append_int(&ctx->bridges, &ctx->bridge_cnt, &ctx->bridge_cap, ctx->parent_edge[u])) { free(stack); return false; }
+        if (ctx->parent[p] != -1 && ctx->low[u] >= ctx->disc[p]) ctx->ap[p] = true;
+    }
+    free(stack); return true;
 }
 
 StructuralResult *compute_structural_analysis(const Graph *g) {
@@ -359,13 +361,20 @@ StructuralResult *compute_structural_analysis(const Graph *g) {
 
     for (int i = 0; i < n; i++) {
         if (ctx.disc[i] == -1) {
-            dfs_tarjan(&ctx, i);
+            if (!tarjan_component(&ctx, i)) {
+                free(ctx.disc); free(ctx.low); free(ctx.parent); free(ctx.parent_edge); free(ctx.ap);
+                free(ctx.bridges); free(ctx.ap_arr); free(sr->component_id); free(sr); return NULL;
+            }
         }
     }
 
     /* Label components: assign by connected component via union-find approximation */
     /* Simpler: re-BFS to assign component IDs */
     Queue *q = queue_create(n + 1);
+    if (!q) {
+        free(ctx.disc); free(ctx.low); free(ctx.parent); free(ctx.parent_edge); free(ctx.ap);
+        free(ctx.bridges); free(ctx.ap_arr); free(sr->component_id); free(sr); return NULL;
+    }
     for (int i = 0; i < n; i++) sr->component_id[i] = -1;
     int comp_id = 0;
     for (int i = 0; i < n; i++) {
@@ -390,16 +399,9 @@ StructuralResult *compute_structural_analysis(const Graph *g) {
     /* Collect articulation points */
     for (int i = 0; i < n; i++) {
         if (ctx.ap[i]) {
-            if (ctx.ap_cnt >= ctx.ap_cap) {
-                int new_cap = ctx.ap_cap * 2;
-                int *tmp = realloc(ctx.ap_arr, (size_t)new_cap * sizeof(int));
-                if (tmp) {
-                    ctx.ap_arr = tmp;
-                    ctx.ap_cap = new_cap;
-                }
-            }
-            if (ctx.ap_cnt < ctx.ap_cap) {
-                ctx.ap_arr[ctx.ap_cnt++] = i;
+            if (!append_int(&ctx.ap_arr, &ctx.ap_cnt, &ctx.ap_cap, i)) {
+                free(ctx.disc); free(ctx.low); free(ctx.parent); free(ctx.parent_edge); free(ctx.ap);
+                free(ctx.bridges); free(ctx.ap_arr); free(sr->component_id); free(sr); return NULL;
             }
         }
     }

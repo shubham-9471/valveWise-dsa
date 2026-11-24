@@ -141,10 +141,16 @@ RankedLink *rank_links(const Graph *g, const StructuralResult *sr, RankMode mode
         if (mode == RANK_BY_BETWEENNESS) ranked[i].score = is_bridge[i] ? 1000.0 : da + db;
         else if (mode == RANK_BY_DEGREE) ranked[i].score = (double)da * db;
         else {
-            LinkStatus old = l->status; l->status = STATUS_BURST;
-            ReachabilityResult *rr = compute_reachability(g);
-            ranked[i].score = rr ? rr->disconnected_demand : 0.0;
-            free_reachability(rr); l->status = old;
+            /* In an undirected connectivity graph, removing a non-bridge
+             * cannot disconnect any node.  Avoid a full BFS for every link;
+             * bridge links still receive their exact demand score. */
+            ranked[i].score = 0.0;
+            if (is_bridge[i] || !sr) {
+                LinkStatus old = l->status; l->status = STATUS_BURST;
+                ReachabilityResult *rr = compute_reachability(g);
+                ranked[i].score = rr ? rr->disconnected_demand : 0.0;
+                free_reachability(rr); l->status = old;
+            }
         }
         snprintf(ranked[i].reason, sizeof(ranked[i].reason), "Link %s score %.1f", l->id, ranked[i].score);
     }

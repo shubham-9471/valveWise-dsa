@@ -17,3 +17,7 @@ No exhaustive case hit the 500,000-combination cap in this matrix.
 The average greedy-minus-exhaustive final-disruption gap was 273.500 L/s.
 Random timings include 100 internal placements per trial and five seeded trials per cell.
 Per-cell baselines, final disruption, runtimes, and candidate counts are in `results.csv`.
+
+## Scale smoke test
+
+On the generated feeder grids, one `--fail P1 --mode reach` analysis completed in 2.597s for 1,000 nodes and 0.706s for 10,000 nodes (Windows MinGW, including JSON serialization; one run each). The 10k case stays below the 1s analysis target after connectivity ranking was changed to BFS only bridge links; timings are machine-dependent.

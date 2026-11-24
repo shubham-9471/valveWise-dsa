@@ -15,7 +15,7 @@ static int add_link(Graph *g, int a, int b) {
 static Graph *make_graph(int n) {
     Graph *g = graph_create(n + 2, n * 3 + 4); if (!g) return NULL;
     graph_add_node(g, "R", NODE_RESERVOIR, 0, 0, 0, 0);
-    for (int i = 1; i < n; i++) { char id[8]; snprintf(id, sizeof(id), "J%d", i); graph_add_node(g, id, NODE_JUNCTION, 0, i, 0, 0); }
+    for (int i = 1; i < n; i++) { char id[32]; snprintf(id, sizeof(id), "J%d", i); graph_add_node(g, id, NODE_JUNCTION, 0, i, 0, 0); }
     for (int i = 1; i < n; i++) add_link(g, i - 1, i);
     for (int i = 0; i < (int)(rnd() % (unsigned)n); i++) { int a = rnd() % n, b = rnd() % n; if (a != b) add_link(g, a, b); }
     return g;

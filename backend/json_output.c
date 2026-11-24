@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 /* ═══════════════════════════════════════════════════════════════════
  * Growable string buffer
@@ -19,26 +20,33 @@ typedef struct {
     char  *buf;
     size_t len;
     size_t cap;
+    bool oom;
 } SB;
 
 static void sb_init(SB *sb) {
     sb->buf = calloc(4096, 1);
     sb->cap = 4096;
     sb->len = 0;
+    sb->oom = (sb->buf == NULL);
 }
 
 static void sb_grow(SB *sb, size_t needed) {
+    if (sb->oom || needed > SIZE_MAX - sb->len) { sb->oom = true; return; }
     while (sb->len + needed >= sb->cap) {
+        if (sb->cap > SIZE_MAX / 2) { sb->oom = true; return; }
         sb->cap *= 2;
         char *tmp = realloc(sb->buf, sb->cap);
-        if (!tmp) return; /* OOM: silently truncate */
+        if (!tmp) { sb->oom = true; return; }
         sb->buf = tmp;
     }
 }
 
 static void sb_append(SB *sb, const char *s) {
+    if (sb->oom || !s) return;
     size_t slen = strlen(s);
+    if (slen == SIZE_MAX) { sb->oom = true; return; }
     sb_grow(sb, slen + 1);
+    if (sb->oom) return;
     memcpy(sb->buf + sb->len, s, slen);
     sb->len += slen;
     sb->buf[sb->len] = '\0';
@@ -53,12 +61,14 @@ static void sb_printf(SB *sb, const char *fmt, ...) {
     va_end(ap_copy);
 
     if (needed < 0) {
+        sb->oom = true;
         va_end(ap);
         return;
     }
 
     char *tmp = malloc((size_t)needed + 1);
     if (!tmp) {
+        sb->oom = true;
         va_end(ap);
         return;
     }
@@ -96,6 +106,8 @@ static void sb_append_escaped(SB *sb, const char *s) {
 
 static char *sb_take(SB *sb) {
     /* Caller owns the returned string; free with json_free() */
+    if (sb->oom) { free(sb->buf); sb->buf = NULL; return NULL; }
+    if (sb->len == SIZE_MAX) { free(sb->buf); sb->buf = NULL; return NULL; }
     char *result = realloc(sb->buf, sb->len + 1);
     if (!result) result = sb->buf;
     result[sb->len] = '\0';
