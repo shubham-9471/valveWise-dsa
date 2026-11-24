@@ -1,5 +1,6 @@
 import { normalizeReport, readJsonFile } from './adapter.js';
 import { NetworkView } from './graphView.js';
+import { renderImpact, renderIsolation, renderRanking, renderOptimization, renderPerformance } from './panels.js';
 
 const fixtureSelect = document.querySelector('#fixture');
 const resultUpload = document.querySelector('#upload');
@@ -14,11 +15,14 @@ const labels = { 'image3-budget-3.json': 'Image 3 / budget 3', 'sample-multi-stu
 const networkFixture = { 'sample.inp': 'sample-no-failure.json', 'net_image3.inp': 'image3-budget-3.json' };
 let currentModel = null; let currentName = ''; let uploadedNetworkText = '';
 let controls = { failures: [], stuck: [] };
+let showProposed = false;
 
 function showError(error) { errorBanner.hidden = false; errorBanner.textContent = typeof error === 'string' ? error : JSON.stringify(error?.error ?? error, null, 2); }
 function clearError() { errorBanner.hidden = true; errorBanner.textContent = ''; }
 function isValve(link) { return Boolean(link?.hasValve) || String(link?.type ?? '').toUpperCase() === 'VALVE'; }
 function toggle(list, id) { return list.includes(id) ? list.filter(value => value !== id) : [...list, id]; }
+function renderGraph() { networkView.render({ ...currentModel, failures: controls.failures, stuckValves: controls.stuck, proposedValves: showProposed ? currentModel.proposedValves : [], isolation: { ...currentModel.isolation } }); }
+function renderPanels() { renderImpact(document.querySelector('#impact-panel'), currentModel); renderIsolation(document.querySelector('#isolation-panel'), currentModel); renderRanking(document.querySelector('#ranking-panel'), currentModel, id => networkView.focus(id)); renderOptimization(document.querySelector('#optimization-panel'), currentModel); renderPerformance(document.querySelector('#performance-panel'), currentModel); }
 
 function render(model, name, resetControls = true) {
   currentModel = model; currentName = name;
@@ -27,7 +31,7 @@ function render(model, name, resetControls = true) {
   document.querySelector('#summary').innerHTML = [['Nodes', model.nodes.length], ['Links', model.links.length], ['Disconnected junctions', model.disconnected.length], ['Disrupted demand', `${model.disruptedDemand} L/s`]].map(([label, value]) => `<article class="card"><strong>${value}</strong><span>${label}</span></article>`).join('');
   document.querySelector('#meta').innerHTML = `<dt>Sources</dt><dd>${model.sources.length}</dd><dt>Valves</dt><dd>${model.valves.length}</dd><dt>Failed links</dt><dd>${controls.failures.length}</dd><dt>Stuck valves</dt><dd>${controls.stuck.length}</dd><dt>Budget</dt><dd>${model.optimization.budget}</dd>`;
   budgetInput.value = model.optimization.budget;
-  networkView.render({ ...model, failures: controls.failures, stuckValves: controls.stuck });
+  renderGraph(); renderPanels();
 }
 
 const networkView = new NetworkView(document.querySelector('#network'), (selection, item) => {
@@ -56,4 +60,5 @@ networkUpload.addEventListener('change', async () => { const file = networkUploa
 document.querySelector('#run').addEventListener('click', runSimulation);
 document.querySelector('#reset').addEventListener('click', async () => { clearError(); uploadedNetworkText = ''; controls = { failures: [], stuck: [] }; budgetInput.value = 3; seedInput.value = ''; try { render(await selectedFixture(), fixtureSelect.value); status.textContent = 'Reset'; } catch (error) { showError(error); } });
 document.querySelector('#fit-network').addEventListener('click', () => networkView.fit());
+document.querySelector('#proposed-toggle').addEventListener('click', event => { showProposed = !showProposed; event.currentTarget.textContent = showProposed ? 'Show baseline' : 'Show proposed valves'; event.currentTarget.setAttribute('aria-pressed', String(showProposed)); renderGraph(); });
 await loadNetworkList(); fixtureSelect.dispatchEvent(new Event('change'));

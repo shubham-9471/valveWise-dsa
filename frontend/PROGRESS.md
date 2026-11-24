@@ -8,6 +8,9 @@ done
 - Added zero-dependency server API with validation, timeout, temp-file cleanup, and static frontend serving.
 - Added simulation controls, network upload, run/reset, error banner, and offline demo fallback.
 - Verified API network listing, validation errors, and missing-binary guidance.
+- Added adapter-fed impact, isolation, ranking, optimization, and performance panels.
+- Added graph highlighting for affected/extra items, ranking focus, and before/after proposals.
+- Added honest optimization comparison with negative/zero improvements and skip reasons.
 next
 - Commit and push frontend/server milestone if origin is available.
 decisions

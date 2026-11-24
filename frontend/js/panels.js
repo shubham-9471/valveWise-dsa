@@ -1,0 +1,30 @@
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+const number = value => Number.isFinite(Number(value)) ? String(Number(value)) : '—';
+const explanation = (model, keys, fallback) => { for (const key of keys) if (typeof model.explanations?.[key] === 'string' && model.explanations[key]) return model.explanations[key]; return fallback; };
+
+export function renderImpact(container, model) {
+  const affected = model.isolation.affectedSections ?? [];
+  container.innerHTML = `<h2>Impact</h2><div class="panel-grid"><div><strong>${model.disconnected.length}</strong><span>Disconnected junctions</span></div><div><strong>${number(model.disruptedDemand)} L/s</strong><span>Disrupted demand</span></div><div><strong>${model.isolation.valvesToClose.length}</strong><span>Valves to close</span></div><div><strong>${model.isolation.extraDisrupted.length}</strong><span>Extra disruption from stuck valves</span></div></div><dl class="panel-list"><dt>Affected sections</dt><dd>${affected.length ? affected.map(escapeHtml).join(', ') : 'None reported'}</dd><dt>Valves to close</dt><dd>${model.isolation.valvesToClose.length ? model.isolation.valvesToClose.map(escapeHtml).join(', ') : 'None reported'}</dd><dt>Extra disrupted nodes</dt><dd>${model.isolation.extraDisrupted.length ? model.isolation.extraDisrupted.map(escapeHtml).join(', ') : 'None reported'}</dd></dl>`;
+}
+
+export function renderIsolation(container, model) {
+  const feasible = model.isolation.isolationFeasible;
+  const text = feasible === false ? explanation(model, ['isolation_feasible', 'isolation', 'worst_case'], 'Isolation is not feasible: the worst-case failure segment cannot be fully isolated without containing a water source.') : feasible === true ? explanation(model, ['isolation_feasible', 'isolation'], 'The reported isolation plan is feasible.') : 'Feasibility was not reported by the backend.';
+  container.innerHTML = `<h2>Isolation</h2>${feasible === false ? `<div class="warning"><strong>Isolation not feasible</strong><p>${escapeHtml(text)}</p></div>` : `<p class="feasibility ${feasible === true ? 'positive' : ''}">${escapeHtml(text)}</p>`}<p>${escapeHtml(explanation(model, ['isolation_detail', 'isolation_explanation'], 'Valves and disrupted sections are taken directly from the engine result.'))}</p>`;
+}
+
+export function renderRanking(container, model, onFocus) {
+  let rows = [...model.rankedLinks]; let sortKey = 'score'; let direction = -1;
+  const draw = () => { rows.sort((a, b) => { const left = a[sortKey] ?? ''; const right = b[sortKey] ?? ''; return (typeof left === 'number' ? left - right : String(left).localeCompare(String(right))) * direction; }); container.innerHTML = `<h2>Critical link ranking</h2><table class="data-table"><thead><tr><th data-sort="linkId">Link</th><th data-sort="score">Score</th><th>Reason</th></tr></thead><tbody>${rows.map(row => `<tr data-link-id="${escapeHtml(row.linkId)}"><td>${escapeHtml(row.linkId)}</td><td>${number(row.score)}</td><td>${escapeHtml(row.reason)}</td></tr>`).join('')}</tbody></table>`; container.querySelectorAll('[data-sort]').forEach(header => header.addEventListener('click', () => { const key = header.dataset.sort; direction = sortKey === key ? direction * -1 : key === 'score' ? -1 : 1; sortKey = key; draw(); })); container.querySelectorAll('tbody tr').forEach(row => row.addEventListener('click', () => onFocus(row.dataset.linkId))); };
+  draw();
+}
+
+export function renderOptimization(container, model) {
+  const methods = ['greedy', 'random', 'topology', 'exhaustive']; const results = methods.map(key => ({ key, result: model.optimization[key] })); const values = results.map(item => Number(item.result?.totalDisruption) || 0); const max = Math.max(1, ...values.map(value => Math.abs(value))); const width = 440; const barRows = results.map((item, index) => { const value = Number(item.result?.totalDisruption) || 0; const barWidth = Math.abs(value) / max * width; const x = value < 0 ? 220 - barWidth : 220; return `<text x="0" y="${24 + index * 32}" class="chart-label">${escapeHtml(item.result?.algorithm || item.key)}</text><rect x="${x}" y="${10 + index * 32}" width="${barWidth}" height="18" class="chart-bar ${item.key}"></rect><text x="${Math.min(680, 235 + barWidth)}" y="${24 + index * 32}" class="chart-value">${number(value)}</text>`; }).join('');
+  container.innerHTML = `<h2>Optimization</h2><table class="data-table optimization-table"><thead><tr><th>Method</th><th>Baseline</th><th>Optimized</th><th>Improvement %</th><th>Runtime</th><th>Candidates</th></tr></thead><tbody>${results.map(item => { const result = item.result ?? {}; const skipped = result.skipped || (!result.algorithm && result.skippedReason); return `<tr><td>${escapeHtml(result.algorithm || item.key)}</td>${skipped ? `<td colspan="5">Skipped: ${escapeHtml(result.skippedReason || 'No reason supplied')}</td>` : `<td>${number(result.baselineDisruption)}</td><td>${number(result.totalDisruption)}</td><td>${number(result.improvementPct)}%</td><td>${number(result.runtimeMs)} ms</td><td>${number(result.candidatesEvaluated)}</td>`}</tr>`; }).join('')}</tbody></table><div class="chart-wrap"><svg class="optimization-chart" viewBox="0 0 700 145" role="img" aria-label="Optimization disruption comparison"><line x1="220" y1="0" x2="220" y2="140" class="chart-axis"></line>${barRows}</svg></div>`;
+}
+
+export function renderPerformance(container, model) {
+  const performance = model.performance ?? {};
+  container.innerHTML = `<h2>Performance</h2><div class="panel-grid"><div><strong>${number(performance.bfsMs)} ms</strong><span>BFS time</span></div><div><strong>${number(performance.optimizationRuntimeMs)} ms</strong><span>Optimization runtime</span></div><div><strong>${number(performance.candidates)}</strong><span>Candidates evaluated</span></div><div><strong>${performance.memory == null ? '—' : escapeHtml(performance.memory)}</strong><span>Memory</span></div></div>`;
+}
