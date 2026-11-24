@@ -1,0 +1,22 @@
+[TITLE]
+Three-node pressure-driven hydraulic hand check
+
+[JUNCTIONS]
+J1 0 10
+J2 0 10
+
+[RESERVOIRS]
+R1 120
+
+[PIPES]
+P1 R1 J1 1000 12 100 OPEN
+P2 J1 J2 1000 8 100 OPEN
+
+[OPTIONS]
+UNITS GPM
+HEADLOSS H-W
+
+[REPORT]
+STATUS NO
+
+[END]

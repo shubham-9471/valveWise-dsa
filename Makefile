@@ -1,6 +1,6 @@
 # ValveWise — Root Makefile
 # `make all`      → C backend only  (backend/valvewise)
-# `make hydraulic` → C++ approximate hydraulic engine (valvewise-sim)
+# `make hydraulic` → legacy C++ demonstration engine (not EPANET)
 # `make test`     → build backend then run tests/run_tests.sh
 # `make clean`    → remove all build artefacts
 

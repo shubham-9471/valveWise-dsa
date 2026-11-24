@@ -13,6 +13,11 @@
 CC      = gcc
 CFLAGS  = -Wall -Wextra -std=c11 -O2 -g -pedantic
 LDFLAGS = -lm
+EPANET_DIR = ../third_party/epanet
+EPANET_CFLAGS = -I$(EPANET_DIR)/include -I$(EPANET_DIR)/src -std=c99 -O2 -g -Depanet2_EXPORTS
+EPANET_SRCS = $(wildcard $(EPANET_DIR)/src/*.c)
+EPANET_OBJS = $(patsubst $(EPANET_DIR)/src/%.c,epanet_%.o,$(EPANET_SRCS))
+EPANET_LIB = libepanet.a
 
 TARGET  = valvewise
 
@@ -24,6 +29,7 @@ SRCS = graph.c \
        optimizer.c \
        inp_parser.c \
        json_output.c \
+       hydraulics.c \
        main.c
 
 OBJS = $(SRCS:.c=.o)
@@ -31,7 +37,7 @@ OBJS = $(SRCS:.c=.o)
 # ── Default target ───────────────────────────────────────────────────
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
+$(TARGET): $(OBJS) $(EPANET_LIB)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 	@echo "Build successful: $(TARGET)"
 
@@ -60,7 +66,16 @@ inp_parser.o:  inp_parser.c inp_parser.h graph.h hashmap.h
 json_output.o: json_output.c json_output.h graph.h isolation.h optimizer.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-main.o:        main.c graph.h hashmap.h inp_parser.h isolation.h optimizer.h json_output.h
+hydraulics.o: hydraulics.c hydraulics.h graph.h optimizer.h $(EPANET_LIB)
+	$(CC) $(CFLAGS) -Depanet2_EXPORTS -I$(EPANET_DIR)/include -c -o $@ $<
+
+$(EPANET_LIB): $(EPANET_OBJS)
+	ar rcs $@ $^
+
+epanet_%.o: $(EPANET_DIR)/src/%.c
+	$(CC) $(EPANET_CFLAGS) -c -o $@ $<
+
+main.o:        main.c graph.h hashmap.h inp_parser.h isolation.h optimizer.h json_output.h hydraulics.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # ── Run with sample network ──────────────────────────────────────────
@@ -82,12 +97,16 @@ test-isolation: graph.o queue.o isolation.o ../tests/isolation_model_test.c
 	$(CC) $(CFLAGS) -I. -o ../tests/isolation_model_test.exe ../tests/isolation_model_test.c graph.o queue.o isolation.o
 	../tests/isolation_model_test.exe
 
+test-optimizer: graph.o queue.o isolation.o optimizer.o heap.o ../tests/optimizer_model_test.c
+	$(CC) $(CFLAGS) -I. -o ../tests/optimizer_model_test.exe ../tests/optimizer_model_test.c graph.o queue.o isolation.o optimizer.o heap.o -lm
+	../tests/optimizer_model_test.exe
+
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
 ifeq ($(OS),Windows_NT)
-	-cmd /c del /q $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ..\tests\isolation_model_test.exe 2>nul
+	-cmd /c del /q $(OBJS) epanet_*.o $(EPANET_LIB) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ..\tests\isolation_model_test.exe ..\tests\optimizer_model_test.exe 2>nul
 else
-	rm -f $(OBJS) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ../tests/isolation_model_test.exe
+	rm -f $(OBJS) epanet_*.o $(EPANET_LIB) $(TARGET) $(TARGET).exe output.json test_output.json test_multi.json ../tests/isolation_model_test.exe ../tests/optimizer_model_test.exe
 endif
 
-.PHONY: all run test test-multi test-isolation clean
+.PHONY: all run test test-multi test-isolation test-optimizer clean

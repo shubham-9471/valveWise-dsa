@@ -24,18 +24,29 @@ set(BACKEND_SOURCES
     backend/optimizer.c
     backend/inp_parser.c
     backend/json_output.c
+    backend/hydraulics.c
 )
+
+file(GLOB EPANET_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/third_party/epanet/src/*.c)
+add_library(valvewise_epanet STATIC ${EPANET_SOURCES})
+target_include_directories(valvewise_epanet PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/epanet/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/epanet/src
+)
+target_compile_definitions(valvewise_epanet PRIVATE epanet2_EXPORTS)
 
 add_library(valvewise_dsa_core STATIC ${BACKEND_SOURCES})
 target_include_directories(valvewise_dsa_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/backend
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/epanet/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/epanet/src
 )
-target_compile_definitions(valvewise_dsa_core PRIVATE epanet_py_EXPORTS)
+target_compile_definitions(valvewise_dsa_core PRIVATE epanet_py_EXPORTS epanet2_EXPORTS)
 
 # Standalone C DSA demo (backend/main.c only — links DSA core, NOT EPANET runtime)
 add_executable(valvewise backend/main.c)
-target_link_libraries(valvewise PRIVATE valvewise_dsa_core m)
+target_link_libraries(valvewise PRIVATE valvewise_dsa_core valvewise_epanet m)
 
 # ==============================================================================
 # C++ OWA-EPANET Simulation Engine (links DSA core + EPANET runtime)

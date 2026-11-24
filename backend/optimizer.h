@@ -42,7 +42,17 @@ typedef struct {
     long    candidates_evaluated; /**< Number of candidate sets tested */
     double  runtime_ms;           /**< Wall-clock time (milliseconds) */
     char    algorithm_name[64];
+    double  mean_disruption;      /**< Random mean across trials; same as total otherwise */
+    double  best_disruption;      /**< Best evaluated disruption */
+    unsigned int seed;            /**< Seed used by random placement */
+    int     trials;               /**< Number of random trials */
+    bool    skipped;               /**< Algorithm was capped/skipped */
+    char    skip_reason[160];
+    double *placement_before;
+    double *placement_after;
 } PlacementResult;
+
+typedef struct ScenarioSet ScenarioSet;
 
 /* Full optimization comparison */
 typedef struct {
@@ -51,7 +61,22 @@ typedef struct {
     PlacementResult *topology;
     PlacementResult *exhaustive; /**< NULL if graph is too large */
     int              budget;
+    unsigned int     seed;
+    int              scenario_count;
+    double           optimization_ms;
+    long             memory_kb;
+    const ScenarioSet *scenarios;
 } OptimizationReport;
+
+struct ScenarioSet {
+    int **failures;               /**< failures[i] has failure_counts[i] link indices */
+    int  *failure_counts;
+    int   count;
+};
+
+ScenarioSet *scenario_set_all(const Graph *g);
+ScenarioSet *scenario_set_failed(const int *failed_links, int failed_count);
+void         free_scenario_set(ScenarioSet *scenarios);
 
 /* Function prototypes */
 RankedLink      *rank_links(const Graph *g,
@@ -63,21 +88,8 @@ double compute_total_disruption(Graph *g,
                                 const int *valve_links, int valve_count,
                                 const int *failure_scenarios, int scenario_count);
 
-PlacementResult *optimize_greedy(Graph *g, int budget,
-                                  const int *failure_scenarios, int scenario_count);
-
-PlacementResult *optimize_random(Graph *g, int budget,
-                                  const int *failure_scenarios, int scenario_count,
-                                  unsigned int seed);
-
-PlacementResult *optimize_topology(Graph *g, int budget,
-                                    const StructuralResult *sr);
-
-PlacementResult *optimize_exhaustive(Graph *g, int budget,
-                                      const int *failure_scenarios, int scenario_count);
-
 OptimizationReport *run_full_optimization(Graph *g, int budget,
-                                           const int *failure_scenarios, int scenario_count,
+                                           const ScenarioSet *scenarios,
                                            const StructuralResult *sr,
                                            unsigned int seed);
 

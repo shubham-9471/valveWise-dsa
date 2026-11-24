@@ -9,7 +9,7 @@ static unsigned rnd(void) { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed
 static Graph *new_graph(int n) {
     Graph *g = graph_create(n + 2, n * 3 + 4); if (!g) return NULL;
     graph_add_node(g, "R", NODE_RESERVOIR, 0, 0, 0, 0);
-    for (int i = 1; i < n; i++) { char id[8]; snprintf(id, sizeof(id), "J%d", i); graph_add_node(g, id, NODE_JUNCTION, 0, i, 0, 0); }
+    for (int i = 1; i < n; i++) { char id[32]; snprintf(id, sizeof(id), "J%d", i); graph_add_node(g, id, NODE_JUNCTION, 0, i, 0, 0); }
     return g;
 }
 static int link_add(Graph *g, int a, int b, int type, LinkStatus status, int valve) {

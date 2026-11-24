@@ -1,0 +1,20 @@
+[title]
+Ring of six junctions
+[junctions]
+J1 0 1
+J2 0 1
+J3 0 1
+J4 0 1
+J5 0 1
+J6 0 1
+[reservoirs]
+R1 100
+[pipes]
+S R1 J1 1 100 100 OPEN
+R12 J1 J2 1 100 100 OPEN
+R23 J2 J3 1 100 100 OPEN
+R34 J3 J4 1 100 100 OPEN
+R45 J4 J5 1 100 100 OPEN
+R56 J5 J6 1 100 100 OPEN
+R61 J6 J1 1 100 100 OPEN
+[end]

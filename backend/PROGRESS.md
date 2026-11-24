@@ -1,14 +1,10 @@
 # PROGRESS.md — anti/backend
-- Done M1: AGENTS/PROGRESS; M2: portable C build/strdup/strcasecmp fixes.
-- Done M3: LF `.gitattributes`; M4: root Makefile targets.
-- Done M5: integration test runner; M6: removed EPANET-compat claim from README.
-- Done A2: isolation segment model, JSON contract field, fixed Tarjan parallel edges.
-- Done A2 tests: seeded 1000-case monotonicity plus ring/tree/source/stuck/parallel checks.
+- Done M1-M6/A2-A6: portable build, isolation, optimizer, parser/data, explanations/benchmarks, iterative Tarjan hardening, fuzz and scale checks.
+- Done H1: vendored OWA-EPANET 2.2 PDA states, optional CLI hydraulics JSON, MinGW build, and hand checks.
 ## Next
-- Commit A2 to anti/backend and push.
+- Commit H1 to anti/backend and push.
 ## Decisions
-- Segments cross unvalved and stuck links only; failed links are removed.
-- Operable boundary valves are the plan; source-containing segments are infeasible and cost total demand.
-- Stuck extra disruption is measured against an operable-valve counterfactual; total uses actual stuck result.
-- Tarjan tracks parent link index, not parent node, so parallel pipes remain back edges.
-- A1: `make all` builds C backend; `make hydraulic` builds C++ simulator.
+- Decisions: segments cross unvalved/stuck links; source segments cost total demand; stuck extra uses an operable counterfactual; Tarjan keys parent edges for parallel pipes.
+- A3/A4: shared non-pump scenarios/candidates, exhaustive cap 500k; dynamic parser, external valves, generators, fixtures, and Net1/Net3 data.
+- A5/A6: measured benchmarks; MinGW lacks ASan/UBSan libraries and Valgrind; normal, fuzz, property, hand, and scale checks pass.
+- H1: EPANET runs four independent states outside optimization; `--hydraulics off` preserves all prior analysis fields; C++ stand-in remains demo-only.
