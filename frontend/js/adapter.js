@@ -30,6 +30,7 @@ export function normalizeReport(input) {
   const sources = nodes.filter(node => node.isSource || /reservoir|tank|source/i.test(node.type)).map(node => node.id);
   const failures = asArray(isolation.failed_links).map(value => asString(value)).filter(Boolean);
   const disconnected = asArray(reachability.disconnected_nodes).map(value => asString(value?.id ?? value)).filter(Boolean);
+  const stuckValves = asArray(isolation.stuck_valves ?? report.stuck_valves).map(value => asString(value?.id ?? value)).filter(Boolean);
   const disruptedDemand = Number.isFinite(Number(isolation.total_disrupted_demand))
     ? Number(isolation.total_disrupted_demand) : asNumber(reachability.disconnected_demand);
   const placement = (value) => {
@@ -39,9 +40,11 @@ export function normalizeReport(input) {
       baselineDisruption: asNumber(result.baseline_disruption), improvementPct: asNumber(result.improvement_pct),
       candidatesEvaluated: asNumber(result.candidates_evaluated), runtimeMs: asNumber(result.runtime_ms) };
   };
+  const proposedValves = new Set(asArray(report.proposed_valves ?? optimization.proposed_valves).map(asString));
+  for (const key of ['greedy', 'random', 'topology', 'exhaustive']) asArray(optimization[key]?.placed_valves).map(asString).forEach(value => proposedValves.add(value));
   return {
     nodes, links, valves: links.filter(link => link.hasValve || link.type.toUpperCase() === 'VALVE'), sources,
-    failures, disconnected, disruptedDemand,
+    failures, disconnected, stuckValves, proposedValves: [...proposedValves], disruptedDemand,
     isolation: { failedLinks: failures, valvesToClose: asArray(isolation.valves_to_close).map(asString),
       extraDisrupted: asArray(isolation.extra_disrupted).map(asString), totalDisruptedDemand: disruptedDemand },
     optimization: { budget: asNumber(optimization.budget), greedy: placement(optimization.greedy), random: placement(optimization.random),

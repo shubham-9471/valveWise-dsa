@@ -3,7 +3,8 @@ done
 - Built backend in a temp directory without editing backend files.
 - Generated four engine JSON fixtures.
 - Added adapter, tests, and fixture/upload summary UI.
-- Verified node:test and fixture loading.
+- Added interactive SVG network view with state styling, tooltips, pan/zoom, fit, and legend.
+- Added pure graph style mapping tests; all 4 tests pass.
 next
 - Commit and push frontend milestone if origin is available.
 decisions

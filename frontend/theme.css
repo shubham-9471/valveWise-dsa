@@ -1,0 +1,11 @@
+@media (prefers-color-scheme: light) {
+  :root { color: #17302b; background: #eef6f3; }
+  body { background: radial-gradient(circle at top right, #d8f0e7, #eef6f3 55%); }
+  .controls, .details, .card, .network-panel { background: #fff; border-color: #b9d4cb; }
+  .subtitle, .details p, .legend, .card span, dl { color: #4f6861; }
+  select, input { color: #17302b; background: #f0f8f5; border-color: #8eb9aa; }
+  button { color: #17302b; background: #d8eee7; }
+  .network { background: #f4faf8; }
+  .network-node text { fill: #31574c; }
+  .network-tooltip { color: #eef8f4; background: #17302b; }
+}

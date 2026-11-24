@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ValveWise</title><link rel="stylesheet" href="styles.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ValveWise</title><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="theme.css"></head>
 <body><main class="shell"><header><p class="eyebrow">VALVEWISE / NETWORK RESILIENCE</p><h1>Failure simulator</h1><p class="subtitle">Engine output, made readable.</p></header>
 <section class="controls" aria-label="Report source"><label for="fixture">Fixture</label><select id="fixture"></select><label class="upload">Upload result JSON<input id="upload" type="file" accept="application/json,.json"></label><span id="status" role="status"></span></section>
 <section id="summary" class="cards" aria-live="polite"></section>
-<section class="details"><div><h2>Current report</h2><p id="report-name">Choose a fixture or upload a result file.</p></div><dl id="meta"></dl></section>
+<section class="details"><div><h2>Current report</h2><p id="report-name">Choose a fixture or upload a result file.</p></div><dl id="meta"></dl></section><section class="network-panel"><div class="network-heading"><div><p class="eyebrow">TOPOLOGY</p><h2>Interactive network</h2></div><button id="fit-network" type="button">Fit view</button></div><div id="network" class="network"></div><div class="legend"><span><i class="legend-dot junction"></i>Junction</span><span><i class="legend-dot reservoir"></i>Reservoir</span><span><i class="legend-dot tank"></i>Tank</span><span><i class="legend-dot pump"></i>Pump-end</span><span><i class="legend-line failed"></i>Failed</span><span><i class="legend-line closed"></i>Closed</span><span><i class="legend-line stuck"></i>Stuck</span><span><i class="legend-line proposed"></i>Proposed</span></div><p id="selection" class="selection">Click a node or link to select it.</p></section>
 </main><script type="module" src="js/main.js"></script></body></html>
