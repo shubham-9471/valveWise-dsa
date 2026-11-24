@@ -6,6 +6,7 @@
  *   valvewise --input <file.inp> [--output <file.json>] [--budget N]
  *             [--fail pipe1,pipe2] [--stuck valve1] [--mode full|rank|reach]
  *             [--seed N] [--verbose]
+ *             [--hydraulics on|off] [--min-pressure N]
  */
 
 #include <stdio.h>
@@ -19,6 +20,7 @@
 #include "isolation.h"
 #include "optimizer.h"
 #include "json_output.h"
+#include "hydraulics.h"
 
 /* ── CLI defaults ─────────────────────────────────────────────────── */
 #define DEFAULT_OUTPUT  "output.json"
@@ -40,6 +42,8 @@ static void print_usage(const char *prog) {
         "  --mode full|rank|reach  Analysis mode (default: full)\n"
         "  --scenarios all|failed  Optimization scenarios (default: failed with --fail, otherwise all)\n"
         "  --seed N              RNG seed for random placement (default: 42)\n"
+        "  --hydraulics on|off   Enable or disable EPANET output (default: on)\n"
+        "  --min-pressure N      PDA minimum pressure in psi (default: 20)\n"
         "  --verbose             Print progress to stderr\n",
         prog);
 }
@@ -124,6 +128,8 @@ int main(int argc, char *argv[]) {
     const char *valves_file = NULL;
     int         budget      = DEFAULT_BUDGET;
     unsigned    seed        = DEFAULT_SEED;
+    double      min_pressure = 20.0;
+    bool        hydraulics_enabled = true;
     bool        verbose     = false;
 
     for (int i = 1; i < argc; i++) {
@@ -136,6 +142,8 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--mode")    == 0 && i+1 < argc) mode        = argv[++i];
         else if (strcmp(argv[i], "--scenarios") == 0 && i+1 < argc) scenario_mode = argv[++i];
         else if (strcmp(argv[i], "--seed")    == 0 && i+1 < argc) seed        = (unsigned)atoi(argv[++i]);
+        else if (strcmp(argv[i], "--hydraulics") == 0 && i+1 < argc) hydraulics_enabled = equal_ci_arg(argv[++i], "on");
+        else if (strcmp(argv[i], "--min-pressure") == 0 && i+1 < argc) min_pressure = atof(argv[++i]);
         else if (strcmp(argv[i], "--verbose") == 0)                verbose     = true;
         else if (strcmp(argv[i], "--help")    == 0) { print_usage(argv[0]); return 0; }
     }
@@ -235,9 +243,15 @@ int main(int argc, char *argv[]) {
         report = run_full_optimization(g, budget, scenarios, sr, seed);
     }
 
+    HydraulicsOutput *hydraulics = hydraulics_run(input_file, g, failed_link_indices, fli_count,
+        iso ? iso->valves_to_close : NULL, iso ? iso->valve_count : 0,
+        report ? report->greedy : NULL, budget, min_pressure, hydraulics_enabled);
+    if (reach && hydraulics) reach->pressure_deficient_count = hydraulics->pressure_deficient_count;
+
     /* ── 9. Serialize and write JSON ───────────────────────────── */
     if (verbose) fprintf(stderr, "      Writing %s ...\n", output_file);
-    char *json = json_full_report(g, reach, iso, sr, ranked, ranked_count, report);
+    char *json = json_full_report(g, reach, iso, sr, ranked, ranked_count, report,
+                                  hydraulics ? hydraulics->json : NULL);
     if (json) {
         if (json_write_to_file(output_file, json) == 0) {
             if (verbose) fprintf(stderr, "Done. Results written to %s\n", output_file);
@@ -276,6 +290,7 @@ int main(int argc, char *argv[]) {
     free_isolation(iso);
     free_structural(sr);
     free_optimization_report(report);
+    hydraulics_free(hydraulics);
     network_index_free(ni);
     graph_free(g);
     return 0;

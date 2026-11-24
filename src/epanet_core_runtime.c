@@ -1,11 +1,11 @@
 /**
  * @file epanet_core_runtime.c
- * @brief Standalone OWA-EPANET 2.2 compatible in-memory simulation runtime.
+ * @brief Legacy non-EPANET hydraulic stand-in retained only for the C++ demo.
  *
- * Implements the core C API functions from epanet2_2.h directly so ValveWise
- * can run hydraulic simulations, status toggles, and step-by-step timesteps
- * without requiring a pre-compiled external epanet2.dll binary, while
- * maintaining 100% binary-level API compatibility with the OWA-EPANET standard.
+ * Implements a legacy compatibility API for the optional C++ demonstration;
+ * it is not used by the production backend and is not OWA-EPANET, while
+ * The production C CLI uses the vendored OWA-EPANET 2.2 sources in
+ * third_party/epanet; this file must not be used for engineering results.
  */
 
 #ifndef DLLEXPORT

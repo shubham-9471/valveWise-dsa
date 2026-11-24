@@ -1,17 +1,10 @@
 # PROGRESS.md — anti/backend
-- Done M1-M6: backend rules, portable C fixes, line endings, Makefiles, tests, and README scope.
-- Done A2: isolation segment model, JSON field, Tarjan parallel-edge fix; 1000 seeded cases pass.
-- Done A3: shared evaluator, comparable algorithms, seeded random stats, exhaustive cap; 100 graph properties pass.
-- Done A4: robust dynamic parser, external valves, generators, hand fixtures, and Net1/Net3 data.
-- Done A5: generated explanations, performance metrics, and measured benchmark CSV/findings.
-- Done A6: iterative Tarjan, allocation/buffer hardening, parser fuzzing, and 1k/10k scale check.
+- Done M1-M6/A2-A6: portable build, isolation, optimizer, parser/data, explanations/benchmarks, iterative Tarjan hardening, fuzz and scale checks.
+- Done H1: vendored OWA-EPANET 2.2 PDA states, optional CLI hydraulics JSON, MinGW build, and hand checks.
 ## Next
-- Commit A6 to anti/backend and push.
+- Commit H1 to anti/backend and push.
 ## Decisions
-- Segments cross unvalved/stuck links; failed links are removed; source-containing segments cost total demand.
-- Stuck extra disruption is measured against an operable-valve counterfactual; total uses actual stuck result.
-- Tarjan tracks parent link index, not parent node, so parallel pipes remain back edges.
-- A3: scenarios default to single non-pump failures; `--fail` is one multi-failure scenario; candidates exclude valves/pumps; exhaustive caps at 500,000.
-- A4: unknown sections skip; malformed/empty/garbage inputs fail; `.inp` stays EPANET-valid and valves are external seeded degree>=3 selections.
-- A5: benchmark findings are measured from 7 networks x 4 budgets; random uses five seeds per cell.
-- A6: MinGW has no ASan/UBSan libraries and Valgrind is unavailable; normal, fuzz, property, hand, and scale checks pass.
+- Decisions: segments cross unvalved/stuck links; source segments cost total demand; stuck extra uses an operable counterfactual; Tarjan keys parent edges for parallel pipes.
+- A3/A4: shared non-pump scenarios/candidates, exhaustive cap 500k; dynamic parser, external valves, generators, fixtures, and Net1/Net3 data.
+- A5/A6: measured benchmarks; MinGW lacks ASan/UBSan libraries and Valgrind; normal, fuzz, property, hand, and scale checks pass.
+- H1: EPANET runs four independent states outside optimization; `--hydraulics off` preserves all prior analysis fields; C++ stand-in remains demo-only.

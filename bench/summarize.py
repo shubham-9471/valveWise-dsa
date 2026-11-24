@@ -12,7 +12,9 @@ def run(repo):
             for budget in BUDGETS:
                 for rep in range(5):
                     seed = 1000 + rep; out = Path(td) / f"{network}_{budget}_{rep}.json"
-                    cmd = [str(binary), "--input", str(inp), "--budget", str(budget), "--seed", str(seed), "--scenarios", "all", "--output", str(out)]
+                    # Hydraulics is deliberately outside the optimization search;
+                    # disable it here so this matrix measures optimizer runtime only.
+                    cmd = [str(binary), "--input", str(inp), "--budget", str(budget), "--seed", str(seed), "--scenarios", "all", "--hydraulics", "off", "--output", str(out)]
                     if valves.exists(): cmd += ["--valves", str(valves)]
                     subprocess.run(cmd, check=True, capture_output=True, text=True); opt = json.loads(out.read_text())["optimization"]
                     for algorithm in ALGORITHMS:

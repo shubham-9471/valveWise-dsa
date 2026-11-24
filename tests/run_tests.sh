@@ -25,6 +25,7 @@ fi
 
 make -C "$REPO/backend" test-isolation
 make -C "$REPO/backend" test-optimizer
+python3 "$REPO/tests/hydraulics_test.py"
 python3 "$REPO/tests/test_hand_networks.py"
 python3 "$REPO/tests/fuzz_parser.py"
 

@@ -183,8 +183,8 @@ char *json_graph(const Graph *g) {
 char *json_reachability(const Graph *g, const ReachabilityResult *r) {
     SB sb; sb_init(&sb);
     if (!r) { sb_append(&sb, "null"); return sb_take(&sb); }
-    sb_printf(&sb, "{\"disconnected_count\":%d,\"disconnected_demand\":%.3f,\"bfs_ms\":%.3f,\"disconnected_nodes\":[",
-              r->disconnected_count, r->disconnected_demand, r->bfs_ms);
+    sb_printf(&sb, "{\"disconnected_count\":%d,\"disconnected_demand\":%.3f,\"bfs_ms\":%.3f,\"pressure_deficient_count\":%d,\"disconnected_nodes\":[",
+              r->disconnected_count, r->disconnected_demand, r->bfs_ms, r->pressure_deficient_count);
     for (int i = 0; i < r->disconnected_count; i++) {
         if (i) sb_append(&sb, ",");
         int ni = r->disconnected_nodes[i];
@@ -380,7 +380,8 @@ char *json_full_report(const Graph            *g,
                        const IsolationResult    *iso,
                        const StructuralResult   *sr,
                        const RankedLink         *ranked, int ranked_count,
-                       const OptimizationReport *report) {
+                       const OptimizationReport *report,
+                       const char                *hydraulics_json) {
     SB sb; sb_init(&sb);
     sb_append(&sb, "{");
 
@@ -428,6 +429,8 @@ char *json_full_report(const Graph            *g,
     sb_printf(&sb, ",\"performance\":{\"bfs_ms\":%.3f,\"optimization_ms\":%.3f,\"memory_kb\":%ld}",
               reach ? reach->bfs_ms : 0.0, report ? report->optimization_ms : 0.0,
               report ? report->memory_kb : -1L);
+    sb_append(&sb, ",\"hydraulics\":");
+    sb_append(&sb, hydraulics_json ? hydraulics_json : "{\"available\":false,\"note\":\"hydraulic output unavailable\"}");
 
     sb_append(&sb, "}");
     return sb_take(&sb);

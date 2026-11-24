@@ -41,7 +41,8 @@ char *json_full_report(const Graph            *g,
                        const IsolationResult    *iso,
                        const StructuralResult   *sr,
                        const RankedLink         *ranked, int ranked_count,
-                       const OptimizationReport *report);
+                       const OptimizationReport *report,
+                       const char                *hydraulics_json);
 
 /** Write a JSON string to filepath.  Returns 0 on success, -1 on error. */
 int   json_write_to_file(const char *filepath, const char *json_str);

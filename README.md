@@ -1,10 +1,9 @@
 # ValveWise — Water Distribution Network Failure & Resilience Optimizer
 
-> **Scope notice:** ValveWise is a **connectivity simulator**, not a full hydraulic solver.
-> It reads EPANET-format `.inp` files for network topology only.
-> The `src/` C++ engine is a **hand-written approximate hydraulic stand-in** — it is *not*
-> OWA-EPANET and makes no claim of EPANET compatibility. For regulatory or engineering
-> hydraulic analysis, use a certified EPANET solver.
+> **Scope notice:** The C backend uses vendored OWA-EPANET 2.2 for optional pressure-driven
+> hydraulic states. Graph isolation and optimization remain connectivity models; outputs are
+> not engineering or regulatory predictions. The legacy `src/` C++ demo stand-in is explicitly
+> non-EPANET and is not used by the backend CLI.
 
 A modular C-based simulation and optimization engine for Water Distribution Networks (WDNs). ValveWise
 parses EPANET-style `.inp` network topologies, models pipe burst failures and valve operability issues
@@ -27,14 +26,15 @@ ValveWise/
 │   ├── inp_parser.h / inp_parser.c # EPANET-style .inp network file parser
 │   ├── json_output.h / json_output.c # Dynamic string buffer JSON serializer
 │   ├── main.c                    # C CLI entrypoint and argument parsing
-│   └── Makefile                  # Backend C11 compilation targets
+│   ├── hydraulics.c / hydraulics.h # OWA-EPANET PDA bridge
+│   └── Makefile                  # Backend + vendored EPANET build
 ├── include/
 │   ├── epanet2_2.h               # OWA-EPANET 2.2+ thread-safe C header
 │   ├── epanet2_enums.h           # OWA-EPANET property & object enumerations
 │   └── EpanetEngine.hpp          # Modern C++ RAII wrapper class for OWA-EPANET
 ├── src/
 │   ├── EpanetEngine.cpp          # In-memory hydraulic simulation & valve control methods
-│   ├── epanet_core_runtime.c     # Approximate hydraulic stand-in (hand-written, not OWA-EPANET)
+│   ├── epanet_core_runtime.c     # Legacy non-EPANET C++ demo stand-in
 │   └── main.cpp                  # C++ test runner & demonstration executable
 ├── docs/
 │   ├── Doxyfile                  # Doxygen configuration file
@@ -94,9 +94,10 @@ ValveWise/
 | Random placement | $O(100\,S\,(V+E))$ per run | 100 internal trials, five seeds in benchmarks |
 | Exhaustive placement | $O(\binom{C}{B}\,S\,(V+E))$ | Hard cap of 500,000 combinations |
 
-ValveWise is a connectivity simulator with simulated link valves; it is not a
-hydraulic solver and does not claim EPANET hydraulic compatibility. Demand,
-pressure, flow, controls, and quality results are not engineering predictions.
+ValveWise graph analysis uses simulated link valves and connectivity. When enabled,
+the backend additionally reports real OWA-EPANET 2.2 PDA states; the legacy C++ demo
+stand-in is not EPANET. Demand, pressure, flow, controls, and quality results are not
+engineering or regulatory predictions.
 
 ---
 

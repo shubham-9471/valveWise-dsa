@@ -29,6 +29,7 @@ typedef struct {
     double  disconnected_demand;  /**< Sum of base_demand for all unreachable nodes (L/s) */
     int    *disconnected_nodes;   /**< Array of unreachable node indices */
     double  bfs_ms;               /**< Reachability BFS duration */
+    int     pressure_deficient_count;
 } ReachabilityResult;
 
 /* ═══════════════════════════════════════════════════════════════════
