@@ -8,21 +8,10 @@
  *             [--seed N] [--verbose]
  */
 
-/* Pull in strdup on POSIX; on Windows _strdup is used below */
-#if !defined(_WIN32)
-#  define _POSIX_C_SOURCE 200809L
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Portable strdup shim: use _strdup on Windows (MinGW/MSVC), strdup elsewhere */
-#ifdef _WIN32
-#  define vw_strdup(s) _strdup(s)
-#else
-#  define vw_strdup(s) strdup(s)
-#endif
+#include <ctype.h>
 
 #include "graph.h"
 #include "hashmap.h"
@@ -47,6 +36,7 @@ static void print_usage(const char *prog) {
         "  --budget N            Valve placement budget (default: 3)\n"
         "  --fail id1,id2,...    Comma-separated pipe IDs to burst\n"
         "  --stuck id1,id2,...   Comma-separated valve IDs to mark stuck-open\n"
+        "  --valves FILE         One link ID per line, optionally followed by 'stuck'\n"
         "  --mode full|rank|reach  Analysis mode (default: full)\n"
         "  --scenarios all|failed  Optimization scenarios (default: failed with --fail, otherwise all)\n"
         "  --seed N              RNG seed for random placement (default: 42)\n"
@@ -59,7 +49,7 @@ static char **split_ids(const char *csv, int *out_count) {
     *out_count = 0;
     if (!csv || csv[0] == '\0') return NULL;
 
-    char *copy = vw_strdup(csv);
+    char *copy = strdup(csv);
     if (!copy) return NULL;
 
     int cap = 16, cnt = 0;
@@ -74,7 +64,7 @@ static char **split_ids(const char *csv, int *out_count) {
             if (!tmp) break;
             arr = tmp;
         }
-        arr[cnt++] = vw_strdup(tok);
+        arr[cnt++] = strdup(tok);
         tok = strtok(NULL, ",");
     }
     free(copy);
@@ -86,6 +76,36 @@ static void free_ids(char **ids, int count) {
     if (!ids) return;
     for (int i = 0; i < count; i++) free(ids[i]);
     free(ids);
+}
+
+static char *trim_arg(char *s) {
+    while (*s && isspace((unsigned char)*s)) s++;
+    char *e = s + strlen(s); while (e > s && isspace((unsigned char)e[-1])) *--e = '\0';
+    return s;
+}
+static int equal_ci_arg(const char *a, const char *b) {
+    while (*a && *b && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { a++; b++; }
+    return *a == '\0' && *b == '\0';
+}
+static int load_valves_file(const char *path, Graph *g, NetworkIndex *ni) {
+    FILE *fp = fopen(path, "r"); if (!fp) return -1;
+    char line[512];
+    while (fgets(line, sizeof(line), fp)) {
+        char *comment = strchr(line, ';'); if (!comment) comment = strchr(line, '#'); if (comment) *comment = '\0';
+        char *text = trim_arg(line); if (!*text) continue;
+        char id[64], status[32] = {0}; int n = sscanf(text, "%63s %31s", id, status), idx;
+        if (n < 1 || (n >= 2 && !equal_ci_arg(status, "stuck")) || !hashmap_get(ni->link_map, id, &idx)) { fclose(fp); return -1; }
+        g->links[idx].has_valve = true;
+        if (n >= 2 && equal_ci_arg(status, "stuck")) g->links[idx].status = STATUS_STUCK;
+    }
+    fclose(fp); return 0;
+}
+static void write_error_json(const char *path, const char *message) {
+    if (!path) return;
+    FILE *fp = fopen(path, "w"); if (!fp) return;
+    fprintf(fp, "{\"error\":\"");
+    for (const char *p = message; *p; p++) { if (*p == '"' || *p == '\\') fputc('\\', fp); fputc(*p, fp); }
+    fprintf(fp, "\"}\n"); fclose(fp);
 }
 
 /* ── main ─────────────────────────────────────────────────────────── */
@@ -100,6 +120,7 @@ int main(int argc, char *argv[]) {
     const char *scenario_mode = NULL;
     const char *fail_csv    = NULL;
     const char *stuck_csv   = NULL;
+    const char *valves_file = NULL;
     int         budget      = DEFAULT_BUDGET;
     unsigned    seed        = DEFAULT_SEED;
     bool        verbose     = false;
@@ -110,6 +131,7 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--budget")  == 0 && i+1 < argc) budget      = atoi(argv[++i]);
         else if (strcmp(argv[i], "--fail")    == 0 && i+1 < argc) fail_csv    = argv[++i];
         else if (strcmp(argv[i], "--stuck")   == 0 && i+1 < argc) stuck_csv   = argv[++i];
+        else if (strcmp(argv[i], "--valves")  == 0 && i+1 < argc) valves_file = argv[++i];
         else if (strcmp(argv[i], "--mode")    == 0 && i+1 < argc) mode        = argv[++i];
         else if (strcmp(argv[i], "--scenarios") == 0 && i+1 < argc) scenario_mode = argv[++i];
         else if (strcmp(argv[i], "--seed")    == 0 && i+1 < argc) seed        = (unsigned)atoi(argv[++i]);
@@ -132,10 +154,17 @@ int main(int argc, char *argv[]) {
 
     if (parse_inp_file(input_file, g, ni) != 0) {
         fprintf(stderr, "Failed to parse '%s'\n", input_file);
+        write_error_json(output_file, "invalid or empty input network");
         graph_free(g); network_index_free(ni);
         return 1;
     }
     if (verbose) graph_print_summary(g);
+    if (valves_file && load_valves_file(valves_file, g, ni) != 0) {
+        fprintf(stderr, "Failed to parse valves file '%s'\n", valves_file);
+        write_error_json(output_file, "invalid valves file");
+        graph_free(g); network_index_free(ni);
+        return 1;
+    }
 
     /* ── 2. Apply --fail ───────────────────────────────────────── */
     int   fail_count = 0;
@@ -200,10 +229,8 @@ int main(int argc, char *argv[]) {
     ScenarioSet *scenarios = NULL;
     if (strcmp(mode, "full") == 0) {
         if (verbose) fprintf(stderr, "[6/6] Running optimization (budget=%d)...\n", budget);
-        bool use_failed = fli_count > 0 &&
-            (!scenario_mode || strcmp(scenario_mode, "failed") == 0);
-        scenarios = use_failed ? scenario_set_failed(failed_link_indices, fli_count)
-                               : scenario_set_all(g);
+        bool use_failed = fli_count > 0 && (!scenario_mode || strcmp(scenario_mode, "failed") == 0);
+        scenarios = use_failed ? scenario_set_failed(failed_link_indices, fli_count) : scenario_set_all(g);
         report = run_full_optimization(g, budget, scenarios, sr, seed);
     }
 

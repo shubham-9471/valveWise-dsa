@@ -5,3 +5,4 @@
 # optimization.seed | uint | Seed used by random placement trials | 2026-11-24
 # optimization.scenario_count | int | Number of shared failure scenarios evaluated by all algorithms | 2026-11-24
 # optimization.*.mean_disruption/best_disruption/trials/skipped/skip_reason | number/int/bool/string | Comparable random statistics and exhaustive cap status | 2026-11-24
+# CLI --valves FILE | flag | Loads external one-link-per-line isolation valves; optional second token `stuck` | 2026-11-24

@@ -37,6 +37,7 @@ int parse_section_junctions   (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_reservoirs  (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_tanks       (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_pipes       (FILE *fp, Graph *g, NetworkIndex *ni);
+int parse_section_pumps       (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_valves      (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_coordinates (FILE *fp, Graph *g, NetworkIndex *ni);
 int parse_section_demands     (FILE *fp, Graph *g, NetworkIndex *ni);
