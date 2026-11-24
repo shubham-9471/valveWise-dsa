@@ -35,3 +35,11 @@ export function renderPerformance(container, model) {
   const memory = performance.memoryKb == null || performance.memoryKb < 0 ? '—' : `${number(performance.memoryKb)} KB`;
   container.innerHTML = `<h2>Performance</h2><div class="panel-grid"><div><strong>${number(performance.bfsMs)} ms</strong><span>BFS time</span></div><div><strong>${number(performance.optimizationRuntimeMs)} ms</strong><span>Optimization runtime</span></div><div><strong>${number(performance.candidates)}</strong><span>Candidates evaluated</span></div><div><strong>${memory}</strong><span>Peak memory</span></div></div>`;
 }
+
+export function renderHydraulics(container, model) {
+  const hydraulics = model.hydraulics ?? { available: false, states: {} };
+  if (!hydraulics.available) { container.innerHTML = '<h2>Hydraulics</h2><span class="badge">hydraulics unavailable</span><p class="empty-state">No hydraulic results were provided by the backend.</p>'; return; }
+  const labels = { baseline: 'Baseline', after_failure: 'After failure', after_isolation: 'After isolation', after_optimization: 'After optimization' };
+  const rows = Object.keys(labels).map(key => { const state = hydraulics.states?.[key] ?? {}; const pressures = (state.nodes ?? []).filter(node => node.pressure != null); const lowest = pressures.reduce((best, node) => !best || node.pressure < best.pressure ? node : best, null); return `<tr><td>${labels[key]}</td><td>${state.pressureDeficient?.length ?? 0}</td><td>${state.unservedDemand == null ? '—' : number(state.unservedDemand)} ${escapeHtml(hydraulics.units?.flow)}</td><td>${lowest ? `${number(lowest.pressure)} ${escapeHtml(hydraulics.units?.pressure)} (${escapeHtml(lowest.id)})` : '—'}</td></tr>`; }).join('');
+  container.innerHTML = `<h2>Hydraulics</h2><p><span class="badge">${escapeHtml(hydraulics.engine || 'hydraulic engine')}</span> Minimum pressure: ${hydraulics.minPressure == null ? '—' : number(hydraulics.minPressure)} ${escapeHtml(hydraulics.units?.pressure)}</p><table class="data-table"><thead><tr><th>State</th><th>Below minimum</th><th>Unserved demand</th><th>Lowest pressure / node</th></tr></thead><tbody>${rows}</tbody></table>`;
+}

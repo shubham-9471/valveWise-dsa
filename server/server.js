@@ -36,6 +36,10 @@ function validateIds(value, field) {
 
 function validateRun(body, networkNames) {
   const fail = validateIds(body.fail, 'fail'); const stuck = validateIds(body.stuck, 'stuck'); const valves = validateIds(body.valves, 'valves');
+  const hydraulics = body.hydraulics == null ? null : body.hydraulics;
+  if (hydraulics !== null && hydraulics !== 'on' && hydraulics !== 'off') throw Object.assign(new Error('hydraulics must be "on" or "off".'), { statusCode: 400 });
+  const minPressure = body.min_pressure == null ? null : body.min_pressure;
+  if (minPressure !== null && (!Number.isFinite(Number(minPressure)) || Number(minPressure) < 0 || Number(minPressure) > 200)) throw Object.assign(new Error('min_pressure must be a number from 0 to 200.'), { statusCode: 400 });
   const budget = body.budget == null ? 3 : body.budget;
   if (!Number.isInteger(budget) || budget < 0 || budget > 50) throw Object.assign(new Error('budget must be an integer from 0 to 50.'), { statusCode: 400 });
   if (body.seed != null && (!Number.isInteger(body.seed) || body.seed < 0 || body.seed > 0xffffffff)) throw Object.assign(new Error('seed must be an unsigned integer.'), { statusCode: 400 });
@@ -49,7 +53,7 @@ function validateRun(body, networkNames) {
     networkName = path.basename(supplied);
     if (networkName !== supplied || !/^[A-Za-z0-9_.-]+\.inp$/i.test(networkName) || !networkNames.includes(networkName)) throw Object.assign(new Error('Unknown network. Choose a filename returned by GET /api/networks.'), { statusCode: 400 });
   }
-  return { fail, stuck, valves, budget, seed: body.seed, networkName, inputText };
+  return { fail, stuck, valves, budget, seed: body.seed, hydraulics, minPressure, networkName, inputText };
 }
 
 async function networkNames() { return (await fsp.readdir(DATA, { withFileTypes: true })).filter(entry => entry.isFile() && /\.inp$/i.test(entry.name)).map(entry => entry.name).sort(); }
@@ -71,6 +75,8 @@ async function runBackend(options, names) {
     if (options.fail.length) args.push('--fail', options.fail.join(','));
     if (options.stuck.length) args.push('--stuck', options.stuck.join(','));
     if (options.seed != null) args.push('--seed', String(options.seed));
+    if (options.hydraulics != null) args.push('--hydraulics', options.hydraulics);
+    if (options.minPressure != null) args.push('--min-pressure', String(options.minPressure));
     if (valvesFile) args.push('--valves', valvesFile);
     const result = await new Promise((resolve, reject) => {
       const child = spawn(bin, args, { cwd: ROOT, windowsHide: true }); let stderr = ''; let stdout = ''; let settled = false;

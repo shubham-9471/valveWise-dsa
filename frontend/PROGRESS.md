@@ -18,6 +18,9 @@ done
 - Server now materializes API valve IDs as a temporary valves file and auto-loads bundled network valves.
 - Added graph highlighting for affected/extra items, ranking focus, and before/after proposals.
 - Added honest optimization comparison with negative/zero improvements and skip reasons.
+- Added tolerant frozen-schema hydraulics normalization and a hand-authored hydraulics demo fixture.
+- Added hydraulic state selector, topology/pressure layer toggle, pressure color/flow-width styling, and distinct deficiency/disconnection marks.
+- Added hydraulic state comparison panel and server validation/pass-through for hydraulics mode and minimum pressure.
 next
 - Commit and push frontend/server milestone if origin is available.
 decisions

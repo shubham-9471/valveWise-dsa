@@ -2,6 +2,16 @@ const asObject = value => value && typeof value === 'object' && !Array.isArray(v
 const asArray = value => Array.isArray(value) ? value : [];
 const asNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const asString = (value, fallback = '') => value == null ? fallback : String(value);
+const optionalNumber = value => Number.isFinite(Number(value)) ? Number(value) : null;
+const hydraulicState = value => {
+  const state = asObject(value);
+  return {
+    nodes: asArray(state.nodes).map(node => ({ id: asString(node?.id), pressure: optionalNumber(node?.pressure), demand: optionalNumber(node?.demand), served: node?.served == null ? null : Boolean(node.served) })),
+    links: asArray(state.links).map(link => ({ id: asString(link?.id), flow: optionalNumber(link?.flow), status: asString(link?.status) })),
+    pressureDeficient: asArray(state.pressure_deficient).map(value => asString(value?.id ?? value)).filter(Boolean),
+    unservedDemand: optionalNumber(state.unserved_demand)
+  };
+};
 
 const normalizePlacement = value => {
   const result = asObject(value);
@@ -55,6 +65,7 @@ export function normalizeReport(input) {
   const isolation = asObject(report.isolation);
   const optimization = asObject(report.optimization);
   const performance = asObject(report.performance);
+  const hydraulicRoot = asObject(report.hydraulics);
   const explanationsRoot = asObject(report.explanations);
   const scenarios = asArray(explanationsRoot.scenarios).map(normalizeScenario);
   const nodes = asArray(graph.nodes).map((node, index) => ({
@@ -81,12 +92,15 @@ export function normalizeReport(input) {
   const candidatesEvaluated = Object.values(runs).reduce((sum, run) => sum + run.candidatesEvaluated, 0);
   const rawError = report.error;
   const error = rawError == null ? null : typeof rawError === 'string' ? { message: rawError } : asObject(rawError);
+  const hydraulicStates = Object.fromEntries(['baseline', 'after_failure', 'after_isolation', 'after_optimization'].map(key => [key, hydraulicState(hydraulicRoot[key])]));
   return {
     nodes, links, valves: links.filter(link => link.hasValve || link.type.toUpperCase() === 'VALVE'), sources,
     failures, disconnected, stuckValves, proposedValves: [...proposedValves], disruptedDemand,
+    reachability: { pressureDeficientCount: optionalNumber(reachability.pressure_deficient_count ?? reachability.pressure_deficient) },
     isolation: {
       failedLinks: failures, valvesToClose: asArray(isolation.valves_to_close).map(asString),
       extraDisrupted: asArray(isolation.extra_disrupted).map(asString), affectedSections: [],
+      pressureDeficientCount: optionalNumber(isolation.pressure_deficient_count ?? isolation.pressure_deficient),
       isolationFeasible: typeof isolation.isolation_feasible === 'boolean' ? isolation.isolation_feasible : firstScenario.isolationFeasible ?? null,
       totalDisruptedDemand: disruptedDemand
     },
@@ -99,7 +113,10 @@ export function normalizeReport(input) {
       candidates: candidatesEvaluated, memoryKb: asNumber(performance.memory_kb, Number.NaN),
       memory: Number.isFinite(Number(performance.memory_kb)) ? Number(performance.memory_kb) : performance.memory_bytes ?? null
     },
-    error
+    error,
+    hydraulics: { available: typeof hydraulicRoot.available === 'boolean' ? hydraulicRoot.available : false,
+      engine: asString(hydraulicRoot.engine), units: { pressure: asString(hydraulicRoot.units?.pressure), flow: asString(hydraulicRoot.units?.flow) },
+      minPressure: optionalNumber(hydraulicRoot.min_pressure), states: hydraulicStates }
   };
 }
 

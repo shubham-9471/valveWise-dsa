@@ -28,3 +28,9 @@ test('handles empty arrays, malformed shapes, and backend error JSON safely', ()
   assert.deepEqual(normalizeReport(null).nodes, []); assert.deepEqual(normalizeReport('partial').links, []);
   assert.equal(normalizeReport({ error: 'invalid or empty input network' }).error.message, 'invalid or empty input network');
 });
+
+test('normalizes hydraulic states without inventing missing values', () => {
+  const model = normalizeReport({ hydraulics: { available: true, engine: 'demo', units: { pressure: 'm', flow: 'L/s' }, min_pressure: 20, baseline: { nodes: [{ id: 'J1', pressure: 15, served: false }], pressure_deficient: ['J1'], unserved_demand: 4 }, after_failure: null, future_field: true } });
+  assert.equal(model.hydraulics.available, true); assert.equal(model.hydraulics.minPressure, 20); assert.equal(model.hydraulics.states.baseline.nodes[0].pressure, 15); assert.deepEqual(model.hydraulics.states.baseline.pressureDeficient, ['J1']); assert.equal(model.hydraulics.states.after_failure.nodes.length, 0); assert.equal(model.hydraulics.states.baseline.unservedDemand, 4);
+  const unavailable = normalizeReport({ hydraulics: { available: false, baseline: { nodes: [{ id: 'J1', pressure: 99 }] } } }); assert.equal(unavailable.hydraulics.available, false);
+});
