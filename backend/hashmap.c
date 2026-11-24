@@ -4,6 +4,7 @@
  */
 
 #include "hashmap.h"
+#include <stdint.h>   /* SIZE_MAX */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

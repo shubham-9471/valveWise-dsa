@@ -1,53 +1,46 @@
-# ValveWise Top-Level Makefile
-# Compiles both the C DSA backend and the C++ EPANET engine, then links them.
+# ValveWise — Root Makefile
+# `make all`      → C backend only  (backend/valvewise)
+# `make hydraulic` → C++ approximate hydraulic engine (valvewise-sim)
+# `make test`     → build backend then run tests/run_tests.sh
+# `make clean`    → remove all build artefacts
+
 CXX = g++
 CC  = gcc
 
-# -Iinclude: finds EpanetEngine.hpp, epanet2_2.h, ValveWiseIntegrated.hpp
-# -Ibackend: finds graph.h, isolation.h, optimizer.h, etc.
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -g -Iinclude -Ibackend -Depanet_py_EXPORTS
-CFLAGS   = -std=c11  -Wall -Wextra -O2 -g -Iinclude -Ibackend -Depanet_py_EXPORTS
+CFLAGS   = -std=c11  -Wall -Wextra -O2 -g -Iinclude -Ibackend
 
 ifeq ($(OS),Windows_NT)
-    TARGET_SIM = valvewise-sim.exe
-    CLEAN_CMD  = cmd /c "del /q src\*.o backend\*.o $(TARGET_SIM) 2>nul"
+    HYD_TARGET = valvewise-sim.exe
+    CLEAN_CMD  = cmd /c "del /q src\*.o backend\*.o $(HYD_TARGET) 2>nul"
 else
-    TARGET_SIM = valvewise-sim
-    CLEAN_CMD  = rm -f src/*.o backend/*.o $(TARGET_SIM)
+    HYD_TARGET = valvewise-sim
+    CLEAN_CMD  = rm -f src/*.o backend/*.o $(HYD_TARGET)
 endif
 
-# ── C backend object files ────────────────────────────────────────────────────
-BACKEND_OBJS = \
-    backend/graph.o      \
-    backend/hashmap.o    \
-    backend/queue.o      \
-    backend/heap.o       \
-    backend/isolation.o  \
-    backend/optimizer.o  \
-    backend/inp_parser.o \
-    backend/json_output.o
-
-# ── C++ source object files ───────────────────────────────────────────────────
-SIM_OBJS = \
-    src/main.o                  \
-    src/EpanetEngine.o          \
-    src/epanet_core_runtime.o   \
+# ── C++ hydraulic object files ────────────────────────────────────────
+HYD_OBJS = \
+    src/main.o                \
+    src/EpanetEngine.o        \
+    src/epanet_core_runtime.o \
     src/ValveWiseIntegrated.o
 
-.PHONY: all clean test test-image3 test-sample backend
+.PHONY: all backend hydraulic test clean
 
-all: $(TARGET_SIM) backend
+# Default: C backend only
+all: backend
 
-# Backend standalone (C only)
+# Backend standalone (C only) — delegates to backend/Makefile
 backend:
 	$(MAKE) -C backend
 
-# ── Link final executable ─────────────────────────────────────────────────────
-$(TARGET_SIM): $(SIM_OBJS) $(BACKEND_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
-	@echo "Build successful: $(TARGET_SIM)"
+# Optional C++ hydraulic part
+hydraulic: $(HYD_TARGET)
 
-# ── C++ compile rules ─────────────────────────────────────────────────────────
+$(HYD_TARGET): $(HYD_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ -lm
+	@echo "Hydraulic build: $(HYD_TARGET)"
+
 src/main.o: src/main.cpp include/EpanetEngine.hpp include/epanet2_2.h include/epanet2_enums.h include/ValveWiseIntegrated.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
@@ -57,23 +50,13 @@ src/EpanetEngine.o: src/EpanetEngine.cpp include/EpanetEngine.hpp include/epanet
 src/ValveWiseIntegrated.o: src/ValveWiseIntegrated.cpp include/ValveWiseIntegrated.hpp include/EpanetEngine.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-# ── C compile rules ───────────────────────────────────────────────────────────
 src/epanet_core_runtime.o: src/epanet_core_runtime.c include/epanet2_2.h include/epanet2_enums.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-backend/%.o: backend/%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+# Run tests: build backend then execute the test script
+test: backend
+	bash tests/run_tests.sh
 
-# ── Test targets ──────────────────────────────────────────────────────────────
-test: test-image3
-
-test-image3: $(TARGET_SIM)
-	./$(TARGET_SIM) data/net_image3.inp
-
-test-sample: $(TARGET_SIM)
-	./$(TARGET_SIM) data/sample.inp
-
-# ── Clean ─────────────────────────────────────────────────────────────────────
 clean:
 	$(MAKE) -C backend clean
 	$(CLEAN_CMD)

@@ -3,11 +3,25 @@
  * Teammate A owns this file.
  */
 
+/* strdup via POSIX on non-Windows */
+#if !defined(_WIN32)
+#  define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "inp_parser.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
+
+/* Portable case-insensitive compare */
+#ifdef _WIN32
+#  include <string.h>  /* _stricmp */
+#  define vw_strcasecmp(a,b) _stricmp((a),(b))
+#else
+#  include <strings.h>
+#  define vw_strcasecmp(a,b) vw_strcasecmp((a),(b))
+#endif
 
 #define LINE_BUF 512
 
@@ -103,7 +117,7 @@ static void parse_line_pipe(const char *line, Graph *g, NetworkIndex *ni) {
     }
 
     LinkStatus st = STATUS_OPEN;
-    if (strcasecmp(status_tok, "CLOSED") == 0) st = STATUS_CLOSED;
+    if (vw_strcasecmp(status_tok, "CLOSED") == 0) st = STATUS_CLOSED;
 
     int idx = graph_add_link(g, id, from_idx, to_idx,
                              length, diam, rough,

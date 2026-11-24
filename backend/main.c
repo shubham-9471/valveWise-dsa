@@ -8,9 +8,21 @@
  *             [--seed N] [--verbose]
  */
 
+/* Pull in strdup on POSIX; on Windows _strdup is used below */
+#if !defined(_WIN32)
+#  define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Portable strdup shim: use _strdup on Windows (MinGW/MSVC), strdup elsewhere */
+#ifdef _WIN32
+#  define vw_strdup(s) _strdup(s)
+#else
+#  define vw_strdup(s) strdup(s)
+#endif
 
 #include "graph.h"
 #include "hashmap.h"
@@ -46,7 +58,7 @@ static char **split_ids(const char *csv, int *out_count) {
     *out_count = 0;
     if (!csv || csv[0] == '\0') return NULL;
 
-    char *copy = strdup(csv);
+    char *copy = vw_strdup(csv);
     if (!copy) return NULL;
 
     int cap = 16, cnt = 0;
@@ -61,7 +73,7 @@ static char **split_ids(const char *csv, int *out_count) {
             if (!tmp) break;
             arr = tmp;
         }
-        arr[cnt++] = strdup(tok);
+        arr[cnt++] = vw_strdup(tok);
         tok = strtok(NULL, ",");
     }
     free(copy);
