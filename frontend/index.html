@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ValveWise</title><link rel="stylesheet" href="styles.css"></head>
+<body><main class="shell"><header><p class="eyebrow">VALVEWISE / NETWORK RESILIENCE</p><h1>Failure simulator</h1><p class="subtitle">Engine output, made readable.</p></header>
+<section class="controls" aria-label="Report source"><label for="fixture">Fixture</label><select id="fixture"></select><label class="upload">Upload result JSON<input id="upload" type="file" accept="application/json,.json"></label><span id="status" role="status"></span></section>
+<section id="summary" class="cards" aria-live="polite"></section>
+<section class="details"><div><h2>Current report</h2><p id="report-name">Choose a fixture or upload a result file.</p></div><dl id="meta"></dl></section>
+</main><script type="module" src="js/main.js"></script></body></html>
