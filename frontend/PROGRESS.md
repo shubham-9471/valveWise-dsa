@@ -13,6 +13,9 @@ done
 - Replaced per-element graph listeners with delegated events; 2000-node layout measured at 3.6 ms.
 - Added frontend README and five-minute viva DEMO script.
 - Added adapter-fed impact, isolation, ranking, optimization, and performance panels.
+- Integrated isolation feasibility, per-scenario explanations, optimization means/bests/placement reasons, performance timings, and backend error JSON.
+- Regenerated eleven fixtures from the updated backend, including external-valve and Net1/Net3 benchmark outputs.
+- Server now materializes API valve IDs as a temporary valves file and auto-loads bundled network valves.
 - Added graph highlighting for affected/extra items, ranking focus, and before/after proposals.
 - Added honest optimization comparison with negative/zero improvements and skip reasons.
 next

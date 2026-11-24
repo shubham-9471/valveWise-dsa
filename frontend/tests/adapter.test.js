@@ -15,14 +15,16 @@ test('tolerates missing sections, nulls, and extra fields', () => {
   assert.deepEqual(model.isolation.valvesToClose, []);
 });
 
-test('normalizes additive impact, feasibility, explanation, and performance fields', () => {
-  const model = normalizeReport({ isolation: { isolation_feasible: false, affected_sections: ['S1'], extra_disrupted: ['J2'] }, explanations: { isolation_feasible: 'Source segment warning' }, performance: { bfs_time_ms: 1.25, memory_bytes: 2048 }, ranked_links: [{ link_id: 'P1', score: -2, reason: 'reason' }] });
-  assert.equal(model.isolation.isolationFeasible, false); assert.deepEqual(model.isolation.affectedSections, ['S1']); assert.equal(model.explanations.isolation_feasible, 'Source segment warning');
-  assert.equal(model.performance.bfsMs, 1.25); assert.equal(model.performance.memory, 2048); assert.equal(model.rankedLinks[0].score, -2);
+test('normalizes additive impact, explanations, optimization extras, and performance fields', () => {
+  const model = normalizeReport({ isolation: { isolation_feasible: false, extra_disrupted: ['J2'] }, explanations: { scenarios: [{ scenario: 1, valves_to_close: [{ link: 'V1', reason: 'bounds segment 1' }], alternative_routes: [{ source: 'R1', via_links: ['P1'] }], isolation_feasible: false }] }, optimization: { seed: 7, scenario_count: 1, greedy: { algorithm: 'Greedy', mean_disruption: 3, best_disruption: 2, placement_explanations: [{ valve: 'P2', before: 4, after: 2, why: 'improved' }] } }, performance: { bfs_ms: 1.25, memory_kb: 2048 }, ranked_links: [{ link_id: 'P1', score: -2, reason: 'reason' }] });
+  assert.equal(model.isolation.isolationFeasible, false); assert.deepEqual(model.isolation.extraDisrupted, ['J2']); assert.equal(model.explanations.scenarios[0].valvesToClose[0].reason, 'bounds segment 1');
+  assert.equal(model.explanations.scenarios[0].alternativeRoutes[0].viaLinks[0], 'P1'); assert.equal(model.optimization.seed, 7); assert.equal(model.optimization.greedy.bestDisruption, 2); assert.equal(model.optimization.greedy.placementExplanations[0].why, 'improved');
+  assert.equal(model.performance.bfsMs, 1.25); assert.equal(model.performance.memoryKb, 2048); assert.equal(model.rankedLinks[0].score, -2);
 });
 
 test('handles empty arrays, malformed shapes, and backend error JSON safely', () => {
   const model = normalizeReport({ graph: { nodes: [], links: [] }, reachability: { disconnected_nodes: [] }, isolation: { failed_links: [], valves_to_close: [] }, ranked_links: [], error: { code: 'BACKEND_FAILED', message: 'engine failed' }, future: { ignored: true } });
   assert.deepEqual(model.nodes, []); assert.deepEqual(model.links, []); assert.deepEqual(model.rankedLinks, []); assert.equal(model.error.code, 'BACKEND_FAILED');
   assert.deepEqual(normalizeReport(null).nodes, []); assert.deepEqual(normalizeReport('partial').links, []);
+  assert.equal(normalizeReport({ error: 'invalid or empty input network' }).error.message, 'invalid or empty input network');
 });

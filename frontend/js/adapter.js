@@ -1,7 +1,52 @@
-const asObject = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-const asArray = (value) => Array.isArray(value) ? value : [];
+const asObject = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+const asArray = value => Array.isArray(value) ? value : [];
 const asNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const asString = (value, fallback = '') => value == null ? fallback : String(value);
+
+const normalizePlacement = value => {
+  const result = asObject(value);
+  return {
+    algorithm: asString(result.algorithm),
+    placedValves: asArray(result.placed_valves).map(asString),
+    placedCount: asNumber(result.placed_count),
+    totalDisruption: asNumber(result.total_disruption),
+    baselineDisruption: asNumber(result.baseline_disruption),
+    meanDisruption: asNumber(result.mean_disruption),
+    bestDisruption: asNumber(result.best_disruption),
+    improvementPct: asNumber(result.improvement_pct),
+    candidatesEvaluated: asNumber(result.candidates_evaluated),
+    runtimeMs: asNumber(result.runtime_ms),
+    seed: asNumber(result.seed),
+    trials: asNumber(result.trials),
+    skipped: Boolean(result.skipped),
+    skippedReason: asString(result.skip_reason ?? result.reason),
+    placementExplanations: asArray(result.placement_explanations).map(item => {
+      const explanation = asObject(item);
+      return { valve: asString(explanation.valve), before: asNumber(explanation.before), after: asNumber(explanation.after), why: asString(explanation.why) };
+    })
+  };
+};
+
+const normalizeScenario = value => {
+  const scenario = asObject(value);
+  return {
+    scenario: asNumber(scenario.scenario),
+    failedLinks: asArray(scenario.failed_links).map(asString),
+    valvesToClose: asArray(scenario.valves_to_close).map(item => {
+      const valve = asObject(item);
+      return { link: asString(valve.link ?? valve.id), reason: asString(valve.reason) };
+    }),
+    stuckBoundary: asArray(scenario.stuck_boundary).map(item => {
+      const valve = asObject(item);
+      return { link: asString(valve.link ?? valve.id), reason: asString(valve.reason) };
+    }),
+    disconnectedJunctions: asArray(scenario.disconnected_junctions).map(asString),
+    alternativeRoutes: asArray(scenario.alternative_routes).map(route => ({
+      source: asString(route?.source), viaLinks: asArray(route?.via_links).map(asString)
+    })),
+    isolationFeasible: typeof scenario.isolation_feasible === 'boolean' ? scenario.isolation_feasible : null
+  };
+};
 
 export function normalizeReport(input) {
   const report = asObject(input);
@@ -10,59 +55,51 @@ export function normalizeReport(input) {
   const isolation = asObject(report.isolation);
   const optimization = asObject(report.optimization);
   const performance = asObject(report.performance);
-  const explanations = asObject(report.explanations ?? isolation.explanations);
+  const explanationsRoot = asObject(report.explanations);
+  const scenarios = asArray(explanationsRoot.scenarios).map(normalizeScenario);
   const nodes = asArray(graph.nodes).map((node, index) => ({
-    id: asString(node?.id, `node-${index + 1}`),
-    type: asString(node?.type, 'UNKNOWN'),
-    elevation: asNumber(node?.elevation),
-    demand: asNumber(node?.base_demand ?? node?.demand),
-    x: asNumber(node?.x), y: asNumber(node?.y),
-    isSource: Boolean(node?.is_source ?? node?.isSource)
+    id: asString(node?.id, `node-${index + 1}`), type: asString(node?.type, 'UNKNOWN'),
+    elevation: asNumber(node?.elevation), demand: asNumber(node?.base_demand ?? node?.demand),
+    x: asNumber(node?.x), y: asNumber(node?.y), isSource: Boolean(node?.is_source ?? node?.isSource)
   }));
   const links = asArray(graph.links).map((link, index) => ({
-    id: asString(link?.id, `link-${index + 1}`),
-    from: asString(link?.from_id ?? link?.from),
-    to: asString(link?.to_id ?? link?.to),
-    type: asString(link?.link_type ?? link?.type, 'UNKNOWN'),
-    status: asString(link?.status, 'UNKNOWN'),
-    length: asNumber(link?.length), diameter: asNumber(link?.diameter),
-    hasValve: Boolean(link?.has_valve ?? link?.hasValve),
-    disruptionImpact: asNumber(link?.disruption_impact ?? link?.disruptionImpact)
+    id: asString(link?.id, `link-${index + 1}`), from: asString(link?.from_id ?? link?.from),
+    to: asString(link?.to_id ?? link?.to), type: asString(link?.link_type ?? link?.type, 'UNKNOWN'),
+    status: asString(link?.status, 'UNKNOWN'), length: asNumber(link?.length), diameter: asNumber(link?.diameter),
+    hasValve: Boolean(link?.has_valve ?? link?.hasValve), disruptionImpact: asNumber(link?.disruption_impact ?? link?.disruptionImpact)
   }));
   const sources = nodes.filter(node => node.isSource || /reservoir|tank|source/i.test(node.type)).map(node => node.id);
-  const failures = asArray(isolation.failed_links).map(value => asString(value)).filter(Boolean);
+  const failures = asArray(isolation.failed_links).map(asString).filter(Boolean);
   const disconnected = asArray(reachability.disconnected_nodes).map(value => asString(value?.id ?? value)).filter(Boolean);
-  const stuckValves = asArray(isolation.stuck_valves ?? report.stuck_valves).map(value => asString(value?.id ?? value)).filter(Boolean);
-  const affectedSections = asArray(isolation.affected_sections ?? report.affected_sections).map(value => asString(value?.id ?? value)).filter(Boolean);
-  const disruptedDemand = Number.isFinite(Number(isolation.total_disrupted_demand))
-    ? Number(isolation.total_disrupted_demand) : asNumber(reachability.disconnected_demand);
-  const placement = (value) => {
-    const result = asObject(value);
-    return { algorithm: asString(result.algorithm), placedValves: asArray(result.placed_valves).map(asString), skipped: Boolean(result.skipped), skippedReason: asString(result.skipped_reason ?? result.reason),
-      placedCount: asNumber(result.placed_count), totalDisruption: asNumber(result.total_disruption),
-      baselineDisruption: asNumber(result.baseline_disruption), improvementPct: asNumber(result.improvement_pct),
-      candidatesEvaluated: asNumber(result.candidates_evaluated), runtimeMs: asNumber(result.runtime_ms) };
-  };
-  const proposedValves = new Set(asArray(report.proposed_valves ?? optimization.proposed_valves).map(asString));
+  const firstScenario = scenarios[0] ?? {};
+  const stuckValves = (firstScenario.stuckBoundary ?? []).map(item => item.link);
+  const disruptedDemand = Number.isFinite(Number(isolation.total_disrupted_demand)) ? Number(isolation.total_disrupted_demand) : asNumber(reachability.disconnected_demand);
+  const proposedValves = new Set();
   for (const key of ['greedy', 'random', 'topology', 'exhaustive']) asArray(optimization[key]?.placed_valves).map(asString).forEach(value => proposedValves.add(value));
-  const optimizationRuns = ['greedy', 'random', 'topology', 'exhaustive'].map(key => placement(optimization[key]));
-  const optimizationRuntimeMs = asNumber(performance.optimization_runtime_ms ?? performance.optimization_ms, optimizationRuns.reduce((sum, run) => sum + run.runtimeMs, 0));
-  const candidatesEvaluated = asNumber(performance.candidates_evaluated, optimizationRuns.reduce((sum, run) => sum + run.candidatesEvaluated, 0));
+  const runs = Object.fromEntries(['greedy', 'random', 'topology', 'exhaustive'].map(key => [key, normalizePlacement(optimization[key])]));
+  const optimizationRuntimeMs = asNumber(performance.optimization_ms, Object.values(runs).reduce((sum, run) => sum + run.runtimeMs, 0));
+  const candidatesEvaluated = Object.values(runs).reduce((sum, run) => sum + run.candidatesEvaluated, 0);
+  const rawError = report.error;
+  const error = rawError == null ? null : typeof rawError === 'string' ? { message: rawError } : asObject(rawError);
   return {
     nodes, links, valves: links.filter(link => link.hasValve || link.type.toUpperCase() === 'VALVE'), sources,
     failures, disconnected, stuckValves, proposedValves: [...proposedValves], disruptedDemand,
-    isolation: { failedLinks: failures, valvesToClose: asArray(isolation.valves_to_close).map(asString),
-      extraDisrupted: asArray(isolation.extra_disrupted).map(asString), affectedSections,
-      isolationFeasible: typeof isolation.isolation_feasible === 'boolean' ? isolation.isolation_feasible : null,
-      totalDisruptedDemand: disruptedDemand },
-    optimization: { budget: asNumber(optimization.budget), greedy: placement(optimization.greedy), random: placement(optimization.random),
-      topology: placement(optimization.topology), exhaustive: placement(optimization.exhaustive) },
+    isolation: {
+      failedLinks: failures, valvesToClose: asArray(isolation.valves_to_close).map(asString),
+      extraDisrupted: asArray(isolation.extra_disrupted).map(asString), affectedSections: [],
+      isolationFeasible: typeof isolation.isolation_feasible === 'boolean' ? isolation.isolation_feasible : firstScenario.isolationFeasible ?? null,
+      totalDisruptedDemand: disruptedDemand
+    },
+    explanations: { scenarios },
+    optimization: { budget: asNumber(optimization.budget), seed: asNumber(optimization.seed), scenarioCount: asNumber(optimization.scenario_count), ...runs },
     structural: asObject(report.structural),
     rankedLinks: asArray(report.ranked_links).map((row, index) => ({ linkId: asString(row?.link_id ?? row?.id, `link-${index + 1}`), score: asNumber(row?.score), reason: asString(row?.reason) })),
-    explanations,
-    performance: { bfsMs: asNumber(performance.bfs_time_ms ?? performance.bfs_ms ?? reachability.bfs_time_ms),
-      optimizationRuntimeMs, candidates: candidatesEvaluated, memory: performance.memory ?? performance.memory_bytes ?? null },
-    error: report.error ? asObject(report.error) : null
+    performance: {
+      bfsMs: asNumber(performance.bfs_ms ?? performance.bfs_time_ms, asNumber(reachability.bfs_ms ?? reachability.bfs_time_ms)), optimizationRuntimeMs,
+      candidates: candidatesEvaluated, memoryKb: asNumber(performance.memory_kb, Number.NaN),
+      memory: Number.isFinite(Number(performance.memory_kb)) ? Number(performance.memory_kb) : performance.memory_bytes ?? null
+    },
+    error
   };
 }
 

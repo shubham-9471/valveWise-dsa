@@ -57,14 +57,21 @@ async function networkNames() { return (await fsp.readdir(DATA, { withFileTypes:
 async function runBackend(options, names) {
   const bin = process.env.VALVEWISE_BIN || path.join(ROOT, 'backend', process.platform === 'win32' ? 'valvewise.exe' : 'valvewise');
   try { await fsp.access(bin, fs.constants.X_OK); } catch { throw Object.assign(new Error(`ValveWise binary is missing: ${bin}`), { statusCode: 503, code: 'BINARY_MISSING', hint: 'Build it with make -C backend (or set VALVEWISE_BIN).' }); }
-  const temp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valvewise-run-')); const output = path.join(temp, 'result.json'); let input = options.networkName ? path.join(DATA, options.networkName) : path.join(temp, 'upload.inp');
+  const temp = await fsp.mkdtemp(path.join(os.tmpdir(), 'valvewise-run-')); const output = path.join(temp, 'result.json'); let input = options.networkName ? path.join(DATA, options.networkName) : path.join(temp, 'upload.inp'); let valvesFile = null;
   try {
     if (options.inputText != null) await fsp.writeFile(input, options.inputText, 'utf8');
+    if (options.valves.length) {
+      valvesFile = path.join(temp, 'valves.txt');
+      await fsp.writeFile(valvesFile, `${options.valves.join('\n')}\n`, 'utf8');
+    } else if (options.networkName) {
+      const bundledValves = path.join(DATA, `${path.basename(options.networkName, path.extname(options.networkName))}.valves`);
+      try { await fsp.access(bundledValves, fs.constants.R_OK); valvesFile = bundledValves; } catch { /* no external valve file */ }
+    }
     const args = ['--input', input, '--output', output, '--budget', String(options.budget), '--verbose'];
     if (options.fail.length) args.push('--fail', options.fail.join(','));
     if (options.stuck.length) args.push('--stuck', options.stuck.join(','));
     if (options.seed != null) args.push('--seed', String(options.seed));
-    if (options.valves.length) args.push('--valves', options.valves.join(','));
+    if (valvesFile) args.push('--valves', valvesFile);
     const result = await new Promise((resolve, reject) => {
       const child = spawn(bin, args, { cwd: ROOT, windowsHide: true }); let stderr = ''; let stdout = ''; let settled = false;
       const finish = (fn, value) => { if (settled) return; settled = true; clearTimeout(timer); fn(value); };
